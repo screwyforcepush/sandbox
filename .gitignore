@@ -1,0 +1,32 @@
+# Environment variables
+.env
+.env.*
+*.env
+
+# Credentials
+*.pem
+*.key
+.git-credentials
+
+# DevPod workspace data
+.devpod/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+__pycache__/
+node_modules/

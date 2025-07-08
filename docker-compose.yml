@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  claude-sandbox:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM mcr.microsoft.com/devcontainers/base:debian
+        
+        # Install sudo and configure for vscode user
+        RUN apt-get update && apt-get install -y sudo \
+            && echo "vscode ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+            && apt-get clean && rm -rf /var/lib/apt/lists/*
+        
+        # Switch to vscode user
+        USER vscode
+        WORKDIR /workspace
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+      - seccomp:unconfined  # May need adjustment based on your needs
+    
+    # Read-only root filesystem (uncomment if needed)
+    # read_only: true
+    
+    # Environment variables - Only what's needed
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - REPO_URL=${REPO_URL:-https://github.com/screwyforcepush/sandbox.git}
+      - REPO_OWNER=${REPO_OWNER:-screwyforcepush}
+      - REPO_NAME=${REPO_NAME:-sandbox}
+      - BRANCH_NAME=${BRANCH_NAME:-main}
+      - SANDBOX_MODE=true
+    
+    # Volumes - Only workspace
+    volumes:
+      - ./:/workspace:rw
+      - /workspace/node_modules  # Anonymous volume for node_modules
+      - /workspace/.git          # Protect .git directory
+      - ./.devcontainer:/workspace/.devcontainer:ro  # Mount devcontainer config
+    
+    # Working directory
+    working_dir: /workspace
+    
+    # Network isolation (uncomment for full isolation)
+    # network_mode: none
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    
+    # Run post-create script and keep container running
+    command: bash -c "bash /workspace/.devcontainer/post-create.sh && sleep infinity"
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Container name
+    container_name: claude-agent-sandbox
+
+# Networks (if not using network_mode: none)
+networks:
+  default:
+    driver: bridge
+    internal: false  # Set to true for no internet access

@@ -1,0 +1,80 @@
+{
+  "name": "Claude Agent Sandbox",
+  "image": "mcr.microsoft.com/devcontainers/base:debian",
+  
+  // Security: Run as non-root user
+  "remoteUser": "vscode",
+  "containerUser": "vscode",
+  
+  // Features to install
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": false,
+      "installOhMyZsh": false,
+      "upgradePackages": true,
+      "username": "vscode",
+      "userUid": "1000",
+      "userGid": "1000"
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    }
+  },
+  
+  // Security: Minimal capabilities
+  "capAdd": [],
+  "securityOpt": [
+    "no-new-privileges",
+    "seccomp=.devcontainer/seccomp-profile.json"
+  ],
+  
+  // Security: Read-only root filesystem (uncomment if needed)
+  // "runArgs": ["--read-only"],
+  
+  // Environment variables - Only expose what's needed
+  "containerEnv": {
+    "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}",
+    "REPO_URL": "${localEnv:REPO_URL:git@github.com:screwyforcepush/sandbox.git}",
+    "REPO_OWNER": "${localEnv:REPO_OWNER}",
+    "REPO_NAME": "${localEnv:REPO_NAME}",
+    "BRANCH_NAME": "${localEnv:BRANCH_NAME:main}",
+    "SANDBOX_MODE": "true"
+  },
+  
+  // Mounts - Only workspace, no host access
+  "mounts": [
+    // Workspace is mounted by default
+    // Add any additional SPECIFIC mounts here if needed
+  ],
+  
+  // Disable features that could compromise security
+  "settings": {
+    "terminal.integrated.shellIntegration.enabled": false
+  },
+  
+  // Post-create command to set up the repository
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  
+  // Lifecycle scripts
+  "onCreateCommand": "echo 'Sandbox environment created'",
+  
+  // Network isolation (if needed)
+  // "runArgs": ["--network=none"],
+  
+  // Resource limits
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "4gb",
+    "storage": "32gb"
+  }
+}
