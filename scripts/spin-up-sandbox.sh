@@ -147,28 +147,11 @@ init_devpod() {
     devpod provider options docker set DOCKER_RUN_AS_USER=true
 }
 
-# Create temporary env file for DevPod (avoid exposing token in process list)
-create_temp_env_file() {
-    local temp_env_file
-    temp_env_file=$(mktemp)
-    
-    {
-        echo "GITHUB_TOKEN=${GITHUB_TOKEN}"
-        echo "REPO_URL=${REPO_URL}"
-        echo "REPO_OWNER=${REPO_OWNER}"
-        echo "REPO_NAME=${REPO_NAME}"
-        echo "BRANCH_NAME=${BRANCH_ARG}"
-    } > "${temp_env_file}"
-    
-    chmod 600 "${temp_env_file}"
-    echo "${temp_env_file}"
-}
 
 # Create and start sandbox
 create_sandbox() {
     local workspace_name="claude-sandbox-${REPO_NAME:-local}-$(date +%Y%m%d-%H%M%S)"
     local temp_dir="/tmp/sandbox-$$"
-    local temp_env_file
     
     echo ""
     echo "📦 Creating sandbox workspace: ${workspace_name}"
@@ -194,21 +177,16 @@ create_sandbox() {
         local repo_path="$(pwd)"
     fi
     
-    # Create temporary env file to avoid token exposure in process list
-    temp_env_file=$(create_temp_env_file)
-    
-    # Create workspace with DevPod using env file
-    devpod up \
+    # Create workspace with DevPod using environment variables
+    devpod up "${repo_path}" \
+        --id "${workspace_name}" \
         --provider docker \
         --ide none \
-        --devcontainer-path "${repo_path}/.devcontainer/devcontainer.json" \
-        --dotfiles-url "" \
-        --env-file "${temp_env_file}" \
-        "${workspace_name}" \
-        "${repo_path}"
-    
-    # Clean up temp env file immediately
-    rm -f "${temp_env_file}"
+        --workspace-env "GITHUB_TOKEN=${GITHUB_TOKEN}" \
+        --workspace-env "REPO_URL=${REPO_URL}" \
+        --workspace-env "REPO_OWNER=${REPO_OWNER}" \
+        --workspace-env "REPO_NAME=${REPO_NAME}" \
+        --workspace-env "BRANCH_NAME=${BRANCH_ARG}"
     
     # Clean up temp directory if used
     if [ -n "$REPO_ARG" ] && [ -d "${temp_dir}" ]; then
@@ -228,7 +206,7 @@ create_sandbox() {
     echo "   ✓ Running as non-root user with sudo in container"
     echo "   ✓ No host privilege escalation"
     echo "   ✓ Full repository access (PAT token)"
-    echo "   ✓ Token not exposed in process list"
+    echo "   ✓ Token passed securely via environment"
     echo "   ✓ Isolated network namespace"
     echo "   ✓ No host filesystem access"
     echo ""
@@ -236,15 +214,23 @@ create_sandbox() {
     echo "   SSH: devpod ssh ${workspace_name}"
     echo "   Logs: devpod logs ${workspace_name}"
     echo "   Stop: devpod stop ${workspace_name}"
-    echo "   Delete: devpod delete ${workspace_name}"
+    echo "   Delete: devpod delete ${workspace_name} --force"
     echo ""
     echo "💡 To open in VS Code:"
     echo "   devpod up ${workspace_name} --ide vscode"
     echo ""
-    echo "📦 The agent can install packages with:"
+    echo "🛠️  Pre-installed tools:"
+    echo "   ✓ GitHub CLI (authenticated with PAT)"
+    echo "   ✓ Node.js v20 with npm"
+    echo "   ✓ Claude Code CLI"
+    echo "   ✓ Git (configured for HTTPS with token)"
+    echo ""
+    echo "📦 Additional packages can be installed with:"
     echo "   apt-get update && apt-get install -y <package>"
     echo "   npm install -g <package>"
-    echo "   pip install <package>"
+    echo ""
+    echo "🔄 Branch setup will occur during container initialization..."
+    echo "   → Target branch: ${BRANCH_ARG}"
 }
 
 # Main execution
