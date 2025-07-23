@@ -184,13 +184,16 @@ setup_rootless() {
 init_devpod() {
     echo "🔧 Initializing DevPod..."
     
-    # Set up Docker provider for DevPod
-    if ! devpod provider list | grep -q "docker"; then
-        devpod provider add docker
+    # Set up Docker provider for DevPod (ignore errors if already exists)
+    if ! devpod provider list 2>/dev/null | grep -q "docker"; then
+        devpod provider add docker 2>/dev/null || true
     fi
     
-    # Configure provider options for security
-    devpod provider options docker set DOCKER_RUN_AS_USER=true
+    # Configure provider options for security (ignore errors if already set)
+    devpod provider options docker set DOCKER_RUN_AS_USER=true 2>/dev/null || true
+    
+    # Show provider status for debugging
+    devpod provider list
 }
 
 # Create temporary env file for DevPod (avoid exposing token in process list)
@@ -226,10 +229,24 @@ create_sandbox() {
     
     # Determine source for DevPod
     if [ -n "$REPO_ARG" ]; then
-        # Use repository URL with branch
-        local source_url="${REPO_URL}@${BRANCH_ARG}"
-        echo "📥 DevPod will clone repository..."
-        echo "   Source: ${source_url}"
+        # Check if branch exists before using it
+        echo "🔍 Checking if branch '${BRANCH_ARG}' exists..."
+        if git ls-remote --heads "${REPO_URL}" "${BRANCH_ARG}" | grep -q "${BRANCH_ARG}"; then
+            # Branch exists, use it
+            local source_url="${REPO_URL}@${BRANCH_ARG}"
+            echo "📥 DevPod will clone repository with existing branch..."
+            echo "   Source: ${source_url}"
+        else
+            # Branch doesn't exist, clone default and inform user
+            local source_url="${REPO_URL}"
+            echo "⚠️  Branch '${BRANCH_ARG}' does not exist in remote repository"
+            echo "📥 DevPod will clone default branch..."
+            echo "   Source: ${source_url}"
+            echo ""
+            echo "   After sandbox starts, create the branch with:"
+            echo "   devpod ssh ${workspace_name}"
+            echo "   git checkout -b ${BRANCH_ARG}"
+        fi
     else
         # Use current directory
         local source_url="$(pwd)"
