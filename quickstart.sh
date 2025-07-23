@@ -27,9 +27,9 @@ else
 fi
 
 if ! command_exists gh; then
-    echo "❌ GitHub CLI is not installed"
+    echo "⚠️  GitHub CLI is not installed (used for token setup)"
     echo "   👉 Install with: brew install gh"
-    missing_deps=true
+    echo "   Note: This will be installed inside the sandbox container"
 else
     echo "✅ GitHub CLI is installed"
 fi
@@ -59,53 +59,63 @@ if [ -f .env ]; then
     echo "✅ GitHub token already configured (.env file exists)"
     echo "   To regenerate, delete .env and run: ./scripts/setup-github-token.sh"
 else
-    echo "🔑 Creating GitHub PAT token..."
-    ./scripts/setup-github-token.sh
+    echo "🔑 GitHub Personal Access Token (PAT) Setup"
+    echo ""
+    echo "You have two options:"
+    echo ""
+    echo "1. Use existing GitHub PAT"
+    echo "   - Run: ./scripts/setup-github-token.sh --token <your-token>"
+    echo ""
+    echo "2. Create new GitHub PAT"
+    echo "   - Run: ./scripts/setup-github-token.sh --create-token"
+    echo "   - ⚠️  This gives access to ALL your repositories!"
+    echo ""
+    read -p "Press Enter to open GitHub token settings in your browser, or Ctrl+C to exit... "
+    
+    # Try to open the URL in the default browser
+    if command -v open &> /dev/null; then
+        open "https://github.com/settings/personal-access-tokens/new"
+    elif command -v xdg-open &> /dev/null; then
+        xdg-open "https://github.com/settings/personal-access-tokens/new"
+    else
+        echo "Please open: https://github.com/settings/personal-access-tokens/new"
+    fi
+    
+    echo ""
+    echo "After creating your token, run:"
+    echo "  ./scripts/setup-github-token.sh --token <your-token>"
+    exit 0
 fi
 
 echo ""
 
-# Step 3: Choose setup method
-echo "📋 Step 3: Choose your setup method..."
-echo ""
-echo "1) DevPod (Recommended - Better isolation and management)"
-echo "2) Docker Compose (Simple, traditional approach)"
-echo ""
-read -p "Select option (1 or 2): " -n 1 -r
-echo ""
+# Step 3: Launch with DevPod
+echo "📋 Step 3: Launching sandbox with DevPod..."
 echo ""
 
-case $REPLY in
-    1)
-        echo "🚀 Launching sandbox with DevPod..."
-        if ! command_exists devpod; then
-            echo "❌ DevPod is required for this option. Please install it first."
-            exit 1
-        fi
-        ./scripts/spin-up-sandbox.sh
-        ;;
-    2)
-        echo "🚀 Launching sandbox with Docker Compose..."
-        source .env
-        docker-compose up -d
-        echo ""
-        echo "✅ Sandbox is running!"
-        echo ""
-        echo "🖥️  Access your sandbox:"
-        echo "   Shell: docker-compose exec claude-sandbox bash"
-        echo "   Logs: docker-compose logs -f"
-        echo "   Stop: docker-compose down"
-        ;;
-    *)
-        echo "❌ Invalid option"
-        exit 1
-        ;;
-esac
+if ! command_exists devpod; then
+    echo "❌ DevPod is not installed."
+    echo ""
+    echo "Please install DevPod first:"
+    echo "   macOS: brew install devpod"
+    echo "   Linux: See https://devpod.sh/docs/getting-started/install"
+    echo ""
+    echo "Alternative: You can use Docker Compose directly with 'docker-compose up -d'"
+    exit 1
+fi
+
+echo "🚀 Creating your first sandbox..."
+./scripts/spin-up-sandbox.sh
 
 echo ""
 echo "📚 Next steps:"
 echo "   - Read SECURITY.md for security details"
 echo "   - Check scripts/ directory for management tools"
 echo "   - Run ./scripts/list-sandboxes.sh to see active sandboxes"
+echo ""
+echo "🔐 Security reminder:"
+if [ -f .env ] && grep -q "^GITHUB_TOKEN=ghp_" .env 2>/dev/null; then
+    echo "   ✓ GitHub PAT configured (global scope - standard for all GitHub PATs)"
+fi
 echo ""
 echo "Happy coding! 🎉"

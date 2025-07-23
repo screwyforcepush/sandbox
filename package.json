@@ -1,0 +1,15 @@
+{
+  "name": "claude-sandbox-sandbox-20250708-223922",
+  "version": "1.0.0",
+  "description": "A secure, isolated development environment for Claude agents with full repository management capabilities.",
+  "main": "test-node.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "lodash": "^4.17.21"
+  }
+}

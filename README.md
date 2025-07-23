@@ -5,11 +5,11 @@ A secure, isolated development environment for Claude agents with full repositor
 ## Features
 
 - 🔒 **Secure Isolation**: Rootless containers with no host privilege escalation
-- 🚀 **Dynamic Repository Support**: Work with any GitHub repository
-- 🌿 **Branch Management**: Create and switch branches on the fly
+- 🚀 **Multiple Sandboxes**: Run multiple isolated environments simultaneously
+- 🌿 **Branch Management**: Each sandbox can work on different branches
 - 📦 **Package Installation**: Agents can install any tools they need
 - 🔑 **Scoped Access**: Repository-specific PAT tokens with full Git permissions
-- 🛠️ **Development Ready**: Pre-configured with Git, GitHub CLI, Python, Node.js
+- 🛠️ **Fast Setup**: Optimized container builds for quick sandbox creation
 
 ## Architecture
 
@@ -54,14 +54,27 @@ A secure, isolated development environment for Claude agents with full repositor
 ./scripts/spin-up-sandbox.sh --repo facebook/react --branch main
 ```
 
-### Managing Sandboxes
+### Working with Multiple Sandboxes
+
+Create multiple sandboxes for different features or branches:
 
 ```bash
-# List active sandboxes
+# Create sandbox for feature A
+./scripts/spin-up-sandbox.sh --branch feature-a
+# Creates: claude-sandbox-<repo>-<timestamp>
+
+# Create sandbox for feature B
+./scripts/spin-up-sandbox.sh --branch feature-b
+# Creates: claude-sandbox-<repo>-<timestamp>
+
+# List all active sandboxes
 ./scripts/list-sandboxes.sh
 
-# Access a sandbox
+# Access specific sandbox
 devpod ssh <sandbox-name>
+
+# Stop a sandbox
+devpod stop <sandbox-name>
 
 # Clean up all sandboxes
 ./scripts/cleanup-sandboxes.sh

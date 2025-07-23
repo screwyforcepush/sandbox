@@ -31,14 +31,25 @@ The sandbox provides multiple layers of security to ensure that Claude agents op
 
 ### 4. Access Control
 
-- **GitHub PAT Tokens**: Repository-specific access tokens with defined scopes
-- **Expanded Permissions**: 
-  - `repo` scope: Full repository control (branch, commit, push, PR management)
-  - `workflow` scope: GitHub Actions management (edit workflows, view logs)
-  - Repository secrets management
-- **Token Expiry**: Tokens expire after 30 days
-- **Repository Isolation**: Each token is scoped to a single repository
+#### GitHub Personal Access Tokens (PATs)
+
+**⚠️ CRITICAL SECURITY INFORMATION:**
+
+There are two types of GitHub PATs with vastly different security implications:
+
+**GitHub Personal Access Tokens**
+- **Global Scope**: All GitHub PATs have access to ALL repositories in your account
+- **Required Scopes**: 
+  - `repo` scope: Full control of repositories you can access
+  - `workflow` scope: GitHub Actions management
+- **Format**: Starts with `ghp_`
+- **Creation**: Created via GitHub web interface at https://github.com/settings/tokens/new
+- **Security Note**: This is how GitHub authentication works - tokens cannot be limited to specific repositories
+
+**Token Management:**
+- **Token Expiry**: 30 days (both types)
 - **Environment Variable Control**: Only explicitly defined variables are passed
+- **Storage**: Tokens stored in `.env` files (gitignored)
 
 ### 5. Resource Limits
 
@@ -58,12 +69,28 @@ The sandbox provides multiple layers of security to ensure that Claude agents op
 
 ## Usage Patterns
 
+### Token Setup (Choose One)
+
+#### Option 1: Use Existing GitHub PAT
+```bash
+# Create token via GitHub UI first:
+# https://github.com/settings/tokens/new
+# Then use it:
+./scripts/setup-github-token.sh --repo owner/name --token ghp_xxxxxxxxxxxxx
+
+# Or pass directly to sandbox:
+./scripts/spin-up-sandbox.sh --repo owner/name --token ghp_xxxxxxxxxxxxx
+```
+
+#### Option 2: Create New GitHub PAT
+```bash
+# Creates new GitHub PAT via CLI
+./scripts/setup-github-token.sh --repo owner/name --create-token
+```
+
 ### Dynamic Repository Management
 
 ```bash
-# Generate token for any repository
-./scripts/setup-github-token.sh --repo owner/name
-
 # Spin up sandbox for specific repo and branch
 ./scripts/spin-up-sandbox.sh --repo owner/name --branch feature-branch
 ```
@@ -71,18 +98,22 @@ The sandbox provides multiple layers of security to ensure that Claude agents op
 ### Multiple Repository Support
 
 - Tokens stored as `.env.{repo-name}`
-- Each repository gets its own isolated token
-- Sandboxes automatically use the correct token
+- Classic PATs are NOT isolated - they access ALL repositories
+- Fine-grained PATs are properly isolated to selected repositories
+- Sandboxes automatically use the correct token from `.env` files
 
 ## Security Best Practices
 
 ### For Users
 
-1. **Separate Tokens**: Generate separate PAT tokens for each repository
-2. **Rotate Tokens**: Replace tokens every 30 days
-3. **Check .gitignore**: Ensure `.env*` files are never committed
-4. **Review Permissions**: Audit token scopes before generation
-5. **Clean Up**: Use `./scripts/cleanup-sandboxes.sh` to remove old sandboxes
+1. **Understand Token Scope**: All GitHub PATs have global scope (access to all your repositories)
+2. **Check Token Format**: 
+   - `ghp_xxx` = Standard GitHub PAT format
+3. **Rotate Tokens**: Replace tokens every 30 days
+4. **Check .gitignore**: Ensure `.env*` files are never committed
+5. **Review Permissions**: Grant only required scopes (repo, workflow)
+6. **Clean Up**: Use `./scripts/cleanup-sandboxes.sh` to remove old sandboxes
+7. **Monitor Usage**: Check GitHub audit logs for token activity
 
 ### For Developers
 
@@ -96,18 +127,19 @@ The sandbox provides multiple layers of security to ensure that Claude agents op
 ### Protected Against
 
 - **Host Privilege Escalation**: Sudo only works within container
-- **Cross-Repository Access**: Tokens are repository-specific
+- **Cross-Repository Access**: All GitHub PATs have global scope
 - **Container Escape**: Rootless mode prevents host root access
 - **Host Filesystem Access**: No bind mounts except workspace
 - **Resource Exhaustion**: CPU/memory limits prevent DoS
-- **Token Theft**: Tokens are scoped, time-limited, and cleared after use
+- **Token Theft**: Tokens are time-limited and cleared after use
 
 ### Accepted Risks
 
-- **Repository Access**: Full read/write access to the specified repository
+- **Repository Access**: GitHub PATs have global scope (access to all repositories in your account)
 - **Package Installation**: Agents can install packages from public sources
 - **Network Access**: Internet access enabled for functionality
 - **Workflow Modification**: Agents can modify GitHub Actions workflows
+- **Organization Access**: Classic PATs can access ALL organization repos you have access to
 
 ## Incident Response
 
@@ -148,9 +180,14 @@ Note: This will disable package installation and network access.
 
 To limit repositories the sandbox can access:
 
-1. Use GitHub App installation tokens instead of PAT tokens
-2. Configure branch protection rules
-3. Use repository rulesets for additional controls
+1. **Use Fine-Grained PATs** (STRONGLY RECOMMENDED):
+   - Create at: https://github.com/settings/personal-access-tokens/new
+   - Select specific repositories
+   - Grant minimal permissions
+2. Use GitHub App installation tokens instead of PAT tokens
+3. Configure branch protection rules
+4. Use repository rulesets for additional controls
+5. **AVOID Classic PATs** - they cannot be restricted to specific repositories
 
 ### Audit Mode
 

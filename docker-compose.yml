@@ -37,7 +37,7 @@ services:
     volumes:
       - ./:/workspace:rw
       - /workspace/node_modules  # Anonymous volume for node_modules
-      - /workspace/.git          # Protect .git directory
+      # - /workspace/.git          # Removed to allow git access
       - ./.devcontainer:/workspace/.devcontainer:ro  # Mount devcontainer config
     
     # Working directory

@@ -28,62 +28,49 @@ git config --global credential.https://github.com.username oauth2
 # Store token using git credential helper (more secure than .git-credentials file)
 printf "protocol=https\nhost=github.com\nusername=oauth2\npassword=%s\n\n" "${GITHUB_TOKEN}" | git credential-cache store
 
-# Determine workspace directory
-WORKSPACE_DIR="/workspaces/${REPO_NAME:-sandbox}"
+# DevPod should have already cloned the repository
+# We just need to ensure we're in the right directory and set up Git auth
 
-# Check if we're already in a git repository (DevPod might have cloned it)
-if [ -d "${WORKSPACE_DIR}/.git" ] || [ -d "/workspace/.git" ]; then
-    echo "📦 Repository already exists..."
-    # Try both possible locations
-    if [ -d "$WORKSPACE_DIR" ]; then
-        cd "$WORKSPACE_DIR"
-    else
-        cd "/workspace"
-    fi
-    
-    # Fetch latest changes
-    echo "📥 Fetching latest changes..."
-    git fetch origin
-    
-    # Check if branch exists
-    if git rev-parse --verify "origin/${BRANCH_NAME}" > /dev/null 2>&1; then
-        echo "🌿 Checking out existing branch: ${BRANCH_NAME}"
-        git checkout "${BRANCH_NAME}"
-        git pull origin "${BRANCH_NAME}"
-    else
-        echo "🌿 Creating new branch: ${BRANCH_NAME}"
-        git checkout -b "${BRANCH_NAME}"
-        echo "📤 Branch '${BRANCH_NAME}' created locally. Push when ready with:"
-        echo "   git push -u origin ${BRANCH_NAME}"
-    fi
+# Find the repository directory
+if [ -d "/workspace/.git" ]; then
+    cd /workspace
+elif [ -d "/workspaces/${REPO_NAME}/.git" ]; then  
+    cd "/workspaces/${REPO_NAME}"
+elif [ -d ".git" ]; then
+    # Already in repo directory
+    :
 else
-    # Clone the repository
-    echo "📦 Cloning repository..."
-    # Ensure REPO_URL uses HTTPS (not SSH)
-    if [[ "${REPO_URL}" == git@github.com:* ]]; then
-        # Convert SSH URL to HTTPS
-        REPO_PATH="${REPO_URL#git@github.com:}"
-        REPO_PATH="${REPO_PATH%.git}"
-        CLONE_URL="https://github.com/${REPO_PATH}.git"
-    else
-        # Already HTTPS
-        CLONE_URL="${REPO_URL}"
-    fi
+    echo "⚠️  Warning: Could not find Git repository. DevPod should have cloned it."
+    echo "   You may need to clone manually if needed."
+fi
+
+# If we're in a git repo, show current status and handle branch
+if [ -d ".git" ]; then
+    echo "📦 Repository information:"
+    echo "   Location: $(pwd)"
+    echo "   Remote: $(git remote get-url origin 2>/dev/null || echo 'No remote configured')"
+    echo "   Current Branch: $(git branch --show-current 2>/dev/null || echo 'No branch')"
     
-    # Clone using the credential helper
-    git clone "${CLONE_URL}" "${WORKSPACE_DIR}"
-    cd "${WORKSPACE_DIR}"
-    
-    # Handle branch
-    if git rev-parse --verify "origin/${BRANCH_NAME}" > /dev/null 2>&1; then
-        echo "🌿 Checking out existing branch: ${BRANCH_NAME}"
-        git checkout "${BRANCH_NAME}"
-    else
-        echo "🌿 Creating new branch: ${BRANCH_NAME}"
-        git checkout -b "${BRANCH_NAME}"
-        echo "📤 Branch '${BRANCH_NAME}' created locally. Push when ready with:"
-        echo "   git push -u origin ${BRANCH_NAME}"
+    # Handle branch creation if BRANCH_NAME is specified and different from current
+    if [ -n "${BRANCH_NAME:-}" ]; then
+        CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+        if [ "${CURRENT_BRANCH}" != "${BRANCH_NAME}" ]; then
+            echo ""
+            echo "🌿 Switching to branch: ${BRANCH_NAME}"
+            
+            # Try to checkout existing branch or create new one
+            if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH_NAME}"; then
+                echo "   Branch exists on remote, checking out..."
+                git checkout "${BRANCH_NAME}"
+            else
+                echo "   Branch doesn't exist, creating new branch..."
+                git checkout -b "${BRANCH_NAME}"
+                echo "   📤 Branch created locally. Push when ready with:"
+                echo "      git push -u origin ${BRANCH_NAME}"
+            fi
+        fi
     fi
+    echo ""
 fi
 
 # Install commonly needed tools
@@ -96,6 +83,8 @@ sudo apt-get install -y --no-install-recommends \
     tree \
     htop \
     build-essential \
+    python3-pip \
+    vim \
     > /dev/null 2>&1
 
 echo ""

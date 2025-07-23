@@ -9,6 +9,7 @@ echo ""
 REPO_ARG=""
 BRANCH_ARG="main"
 ENV_FILE=".env"
+TOKEN_ARG=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -20,18 +21,28 @@ while [[ $# -gt 0 ]]; do
             BRANCH_ARG="$2"
             shift 2
             ;;
+        --token)
+            TOKEN_ARG="$2"
+            shift 2
+            ;;
         --help|-h)
             echo "Usage: $0 [options]"
             echo ""
             echo "Options:"
             echo "  --repo owner/name    Specify repository (e.g., facebook/react)"
             echo "  --branch name        Specify branch (default: main, creates if doesn't exist)"
+            echo "  --token TOKEN        Use provided GitHub PAT token (overrides .env file)"
             echo "  --help               Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0                                      # Use current repo"
             echo "  $0 --repo owner/name                    # Use specific repo"
             echo "  $0 --repo owner/name --branch feature   # Use specific repo and branch"
+            echo "  $0 --repo owner/name --token ghp_xxx    # Use specific token"
+            echo ""
+            echo "Security:"
+            echo "  - GitHub PATs have global scope (access to all repositories in your account)"
+            echo "  - This is standard behavior for all GitHub Personal Access Tokens"
             exit 0
             ;;
         *)
@@ -83,35 +94,70 @@ check_prerequisites() {
 
 # Load environment variables
 load_env() {
-    # Determine which .env file to use
-    if [ -n "$REPO_ARG" ]; then
-        local repo_name="${REPO_ARG##*/}"
-        if [ -f ".env.${repo_name}" ]; then
-            ENV_FILE=".env.${repo_name}"
+    # If token provided via command line, use it directly
+    if [ -n "$TOKEN_ARG" ]; then
+        GITHUB_TOKEN="$TOKEN_ARG"
+        
+        # Set repository info based on arguments or current repo
+        if [ -n "$REPO_ARG" ]; then
+            REPO_OWNER="${REPO_ARG%%/*}"
+            REPO_NAME="${REPO_ARG##*/}"
+            REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
         else
-            echo "❌ .env.${repo_name} file not found."
-            echo "   Run: ./scripts/setup-github-token.sh --repo ${REPO_ARG}"
-            exit 1
+            # Try to get from current git repo
+            GIT_URL="$(git remote get-url origin 2>/dev/null || echo "")"
+            if [ -z "$GIT_URL" ]; then
+                echo "❌ No repository specified and not in a git repository."
+                echo "   Use: $0 --repo owner/name --token <token>"
+                exit 1
+            fi
+            
+            # Extract owner/name from Git URL
+            if [[ "$GIT_URL" =~ github\.com[:/]([^/]+)/([^/\.]+)(\.git)?$ ]]; then
+                REPO_OWNER="${BASH_REMATCH[1]}"
+                REPO_NAME="${BASH_REMATCH[2]}"
+                REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
+            else
+                echo "❌ Unable to parse repository from Git URL: $GIT_URL"
+                exit 1
+            fi
         fi
+        
+        echo "🔑 Using provided token"
+        echo "✅ Using GitHub PAT (global scope)"
     else
-        if [ ! -f ".env" ]; then
-            echo "❌ .env file not found."
-            echo "   Run: ./scripts/setup-github-token.sh"
-            exit 1
+        # Load from .env file
+        if [ -n "$REPO_ARG" ]; then
+            local repo_name="${REPO_ARG##*/}"
+            if [ -f ".env.${repo_name}" ]; then
+                ENV_FILE=".env.${repo_name}"
+            else
+                echo "❌ .env.${repo_name} file not found."
+                echo "   Run: ./scripts/setup-github-token.sh --repo ${REPO_ARG}"
+                echo "   Or use: $0 --repo ${REPO_ARG} --token <your-token>"
+                exit 1
+            fi
+        else
+            if [ ! -f ".env" ]; then
+                echo "❌ .env file not found."
+                echo "   Run: ./scripts/setup-github-token.sh"
+                echo "   Or use: $0 --token <your-token>"
+                exit 1
+            fi
         fi
-    fi
-    
-    # Load the environment file securely
-    set -a
-    # shellcheck source=/dev/null
-    source "${ENV_FILE}"
-    set +a
-    
-    # Override with command line args if provided
-    if [ -n "$REPO_ARG" ]; then
-        REPO_OWNER="${REPO_ARG%%/*}"
-        REPO_NAME="${REPO_ARG##*/}"
-        REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
+        
+        # Load the environment file securely
+        set -a
+        # shellcheck source=/dev/null
+        source "${ENV_FILE}"
+        set +a
+        
+        # Override with command line args if provided
+        if [ -n "$REPO_ARG" ]; then
+            REPO_OWNER="${REPO_ARG%%/*}"
+            REPO_NAME="${REPO_ARG##*/}"
+            REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
+        fi
     fi
 }
 
@@ -138,13 +184,16 @@ setup_rootless() {
 init_devpod() {
     echo "🔧 Initializing DevPod..."
     
-    # Set up Docker provider for DevPod
-    if ! devpod provider list | grep -q "docker"; then
-        devpod provider add docker
+    # Set up Docker provider for DevPod (ignore errors if already exists)
+    if ! devpod provider list 2>/dev/null | grep -q "docker"; then
+        devpod provider add docker 2>/dev/null || true
     fi
     
-    # Configure provider options for security
-    devpod provider options docker set DOCKER_RUN_AS_USER=true
+    # Configure provider options for security (ignore errors if already set)
+    devpod provider options docker set DOCKER_RUN_AS_USER=true 2>/dev/null || true
+    
+    # Show provider status for debugging
+    devpod provider list
 }
 
 # Create temporary env file for DevPod (avoid exposing token in process list)
@@ -167,7 +216,6 @@ create_temp_env_file() {
 # Create and start sandbox
 create_sandbox() {
     local workspace_name="claude-sandbox-${REPO_NAME:-local}-$(date +%Y%m%d-%H%M%S)"
-    local temp_dir="/tmp/sandbox-$$"
     local temp_env_file
     
     echo ""
@@ -176,44 +224,46 @@ create_sandbox() {
     echo "   Branch: ${BRANCH_ARG}"
     echo ""
     
-    # Prepare the repository
-    if [ -n "$REPO_ARG" ]; then
-        # Clone specified repository to temp location
-        echo "📥 Cloning repository..."
-        mkdir -p "${temp_dir}"
-        git clone "${REPO_URL}" "${temp_dir}/workspace"
-        
-        # Copy devcontainer configuration
-        echo "📋 Setting up devcontainer configuration..."
-        cp -r "$(pwd)/.devcontainer" "${temp_dir}/workspace/"
-        
-        # Update the path
-        local repo_path="${temp_dir}/workspace"
-    else
-        # Use current directory
-        local repo_path="$(pwd)"
-    fi
-    
     # Create temporary env file to avoid token exposure in process list
     temp_env_file=$(create_temp_env_file)
     
-    # Create workspace with DevPod using env file
+    # Determine source for DevPod
+    if [ -n "$REPO_ARG" ]; then
+        # Check if branch exists before using it
+        echo "🔍 Checking if branch '${BRANCH_ARG}' exists..."
+        if git ls-remote --heads "${REPO_URL}" "${BRANCH_ARG}" | grep -q "${BRANCH_ARG}"; then
+            # Branch exists, use it
+            local source_url="${REPO_URL}@${BRANCH_ARG}"
+            echo "📥 DevPod will clone repository with existing branch..."
+            echo "   Source: ${source_url}"
+        else
+            # Branch doesn't exist, clone default and inform user
+            local source_url="${REPO_URL}"
+            echo "⚠️  Branch '${BRANCH_ARG}' does not exist in remote repository"
+            echo "📥 DevPod will clone default branch..."
+            echo "   Source: ${source_url}"
+            echo ""
+            echo "   After sandbox starts, create the branch with:"
+            echo "   devpod ssh ${workspace_name}"
+            echo "   git checkout -b ${BRANCH_ARG}"
+        fi
+    else
+        # Use current directory
+        local source_url="$(pwd)"
+        echo "📥 Using current directory..."
+    fi
+    
+    # Create workspace with DevPod using repository URL
     devpod up \
         --provider docker \
         --ide none \
-        --devcontainer-path "${repo_path}/.devcontainer/devcontainer.json" \
-        --dotfiles-url "" \
-        --env-file "${temp_env_file}" \
-        "${workspace_name}" \
-        "${repo_path}"
+        --id "${workspace_name}" \
+        --workspace-env-file "${temp_env_file}" \
+        "${source_url}"
     
     # Clean up temp env file immediately
     rm -f "${temp_env_file}"
     
-    # Clean up temp directory if used
-    if [ -n "$REPO_ARG" ] && [ -d "${temp_dir}" ]; then
-        rm -rf "${temp_dir}"
-    fi
     
     echo ""
     echo "✅ Sandbox created successfully!"
@@ -227,7 +277,7 @@ create_sandbox() {
     echo "🔐 Security features:"
     echo "   ✓ Running as non-root user with sudo in container"
     echo "   ✓ No host privilege escalation"
-    echo "   ✓ Full repository access (PAT token)"
+    echo "   ✓ GitHub PAT (global scope - standard for all GitHub PATs)"
     echo "   ✓ Token not exposed in process list"
     echo "   ✓ Isolated network namespace"
     echo "   ✓ No host filesystem access"
