@@ -419,3 +419,92 @@ Tokens are stored in `.env` files (gitignored) and passed to containers via envi
 - Keep devcontainer.json minimal for fast builds
 - Scripts should validate inputs and provide clear error messages
 - Maintain backwards compatibility with Docker Compose for simple use cases
+
+## Locale Configuration
+
+### Why: Standardized locale settings for consistent behavior
+Some command-line tools and applications expect UTF-8 locale settings to handle text encoding properly. Without these settings, users may encounter encoding errors or warnings.
+
+### Decision: Configure en_US.UTF-8 in bashrc
+Added locale exports to post-create.sh that append to user's ~/.bashrc:
+- `export LANG=en_US.UTF-8`
+- `export LC_ALL=en_US.UTF-8`
+
+This ensures all interactive shell sessions in sandboxes have consistent UTF-8 locale configuration.
+
+### Patterns: Appended to bashrc during post-create
+The configuration is added at the end of post-create.sh, right before clearing the GitHub token. This ensures it runs after all other setup is complete.
+
+## Base Image Migration (Bullseye → Bookworm)
+
+### Why: GLIBC_2.32 requirement for modern applications
+Some applications and binaries require GLIBC_2.32 or higher to function properly. The previous Debian Bullseye base image (javascript-node:20-bullseye) provided GLIBC 2.31, which was insufficient.
+
+### Decision: Upgrade to Debian Bookworm base image
+Updated devcontainer.json from `mcr.microsoft.com/devcontainers/javascript-node:20-bullseye` to `20-bookworm`.
+- **GLIBC Version**: Bookworm provides GLIBC 2.36 (exceeds 2.32 requirement)
+- **OS**: Debian GNU/Linux 12 (stable release)
+- **Compatibility**: Maintains same Node.js version (20.x) and Microsoft devcontainer ecosystem
+- **Risk**: Minimal - staying within Debian ecosystem with conservative upgrade path
+
+### Patterns: Validated migration approach
+- Same Microsoft devcontainer base image family (javascript-node:20-*)
+- All existing post-create.sh scripts work without modification
+- Security configurations (non-root user, capability drops) remain intact
+- Development tools (GitHub CLI, git, Claude Code) function properly
+- Locale settings and environment configuration preserved
+
+### Issues: None identified during migration
+- No package compatibility issues encountered
+- All authentication and tool setup works as expected
+- Performance characteristics similar to previous image
+- Docker build times comparable
+
+### Next: Monitor for any issues in production use
+- Track any compatibility issues with specific applications requiring GLIBC_2.32+
+- Consider future migrations to Ubuntu-based images if needed
+- No immediate changes planned - Bookworm is current Debian stable
+
+## Enhanced Sandbox Monitoring
+
+### Why: Resource usage visibility for DevPod workspaces
+Users need to monitor resource consumption (CPU, memory, disk, network) of their sandboxes to understand performance characteristics and identify resource-intensive workloads.
+
+### Decision: Enhanced list-sandboxes.sh with Docker metrics integration
+Updated `scripts/list-sandboxes.sh` to display real-time resource usage alongside workspace information by integrating with Docker stats API.
+
+**Capabilities Added**:
+- **Resource Metrics**: CPU%, Memory usage/limit, Network I/O, Disk I/O, Process count  
+- **Repository Info**: Clean display of repo/branch (e.g., `owner/repo@branch`)
+- **Container Details**: Docker container ID and name for direct container operations
+- **Status Detection**: Shows RUNNING vs STOPPED for each workspace
+- **Color Coding**: Green/yellow/red indicators for CPU usage levels
+- **System Summary**: Total active containers and system memory overview
+
+**Display Format**:
+```
+NAME                           SOURCE                              STATUS   MEMORY       CPU%   NET I/O      DISK I/O     PIDS  CONTAINER_ID  CONTAINER_NAME  AGE
+claude-sandbox-webtrack-2025...  owner/repo@branch                 RUNNING  1.2GB/62GB   0.1%   1GB/135MB    700kB/2.4GB  119   584fc6f4763c  admiring_borg   4h
+```
+
+### Patterns: DevPod container correlation approach
+- Uses `docker ps --filter "label=dev.containers.id"` to identify DevPod containers
+- Correlates DevPod workspace status with Docker container stats
+- Handles multiple running sandboxes by showing most recent container metrics
+- Fallback handling for stopped/missing containers
+
+**Technical Implementation**:
+- `docker stats --no-stream` for one-shot metric collection (avoids hanging processes)
+- DevPod status detection via `devpod status <workspace>` (captures stderr output)
+- Human-readable format with proper terminal width formatting
+- Color-coded output using ANSI escape sequences
+
+### Issues: Container matching complexity
+- DevPod generates random container names (e.g., `funny_morse`) rather than workspace-based names
+- Current approach uses most recent DevPod container for each running workspace
+- Multiple concurrent sandboxes may show same container stats (acceptable for monitoring overview)
+
+### Next: Potential improvements for exact container matching
+- Investigate DevPod container labeling for precise workspace-to-container mapping
+- Consider timestamp-based correlation for better accuracy with concurrent sandboxes
+- Add container name/ID display for debugging purposes

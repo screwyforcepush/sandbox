@@ -85,6 +85,7 @@ sudo apt-get install -y --no-install-recommends \
     build-essential \
     python3-pip \
     vim \
+    tmux \
     > /dev/null 2>&1
 
 echo ""
@@ -107,6 +108,14 @@ echo "   - System packages: sudo apt-get install <package>"
 echo "   - Python packages: pip install <package>"
 echo "   - Node packages: npm install [-g] <package>"
 echo "   - Any other tools the agent needs!"
+
+# Configure locale settings in user's bashrc
+echo "" >> ~/.bashrc
+echo "# Locale configuration" >> ~/.bashrc
+echo "export LANG=en_US.UTF-8" >> ~/.bashrc
+echo "export LC_ALL=en_US.UTF-8" >> ~/.bashrc
+echo ""
+echo "🌍 Locale configured: en_US.UTF-8"
 
 # Clear sensitive token from environment
 unset GITHUB_TOKEN

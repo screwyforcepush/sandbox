@@ -1,6 +1,6 @@
 {
   "name": "Claude Agent Sandbox",
-  "image": "mcr.microsoft.com/devcontainers/javascript-node:20-bullseye",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20-bookworm",
   
   // Security: Run as non-root user
   "remoteUser": "node",
