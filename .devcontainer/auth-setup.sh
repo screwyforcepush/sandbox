@@ -33,11 +33,21 @@ else
     echo "❌ npm not found"
 fi
 
-# Check Claude Code installation
+# Check Claude Code installation and authentication
 if command -v claude > /dev/null 2>&1; then
     echo "✅ Claude Code CLI is available"
-    # Skip doctor check as it requires interactive mode
-    echo "ℹ️  Claude Code ready (skipping health check in non-interactive mode)"
+    
+    # Configure Claude authentication if token is available
+    if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+        echo "🔑 Configuring Claude Code authentication..."
+        # Export token for Claude Code to use
+        export CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}"
+        echo "✅ Claude Code authentication configured"
+        echo "ℹ️  Claude Code is ready to use without manual login"
+    else
+        echo "ℹ️  No Claude token found - manual authentication required"
+        echo "   To authenticate: claude auth login"
+    fi
 else
     echo "❌ Claude Code CLI not found"
 fi

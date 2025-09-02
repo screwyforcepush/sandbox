@@ -420,6 +420,34 @@ Tokens are stored in `.env` files (gitignored) and passed to containers via envi
 - Scripts should validate inputs and provide clear error messages
 - Maintain backwards compatibility with Docker Compose for simple use cases
 
+## uv Python Package Manager Installation
+
+### Why: Fast, reliable Python package management in sandboxes
+Sandboxes frequently work with Python projects requiring package installation. uv provides a much faster alternative to pip with better dependency resolution and consistent environments. It's written in Rust for speed and reliability.
+
+### Decision: Install uv via official installer in post-create.sh
+Added uv installation to `.devcontainer/post-create.sh` using the official Astral installer script:
+- Uses `curl -LsSf https://astral.sh/uv/install.sh | sh` for secure installation
+- Installs to `~/.cargo/bin` and configures PATH automatically
+- Sources environment in current session and adds to `.bashrc` for future sessions
+
+### Patterns: Available immediately in all new sandboxes
+- **Installation**: Automatic during sandbox creation (post-create.sh line 91-98)
+- **Usage**: `uv pip install <package>` instead of `pip install <package>`
+- **Virtual environments**: `uv venv` for creating Python environments
+- **Running scripts**: `uv run` for executing in managed environments
+- **Performance**: 10-100x faster than pip for most operations
+
+### Issues: None - installation is isolated and non-breaking
+- Falls back to regular pip if uv installation fails
+- Does not interfere with existing Python installations
+- PATH configuration handled automatically via `.cargo/env`
+
+### Next: Monitor adoption and consider additional Python tooling
+- Evaluate if additional Python tools would benefit from similar treatment
+- Consider adding poetry or pipenv if frequently requested
+- No immediate changes planned - uv covers most Python package management needs
+
 ## Locale Configuration
 
 ### Why: Standardized locale settings for consistent behavior
@@ -508,3 +536,204 @@ claude-sandbox-webtrack-2025...  owner/repo@branch                 RUNNING  1.2G
 - Investigate DevPod container labeling for precise workspace-to-container mapping
 - Consider timestamp-based correlation for better accuracy with concurrent sandboxes
 - Add container name/ID display for debugging purposes
+
+## Claude Authentication Integration
+
+### Why: Eliminate manual authentication flow in sandboxes
+Users previously had to manually run `claude auth login` in each sandbox, opening a browser and copying authentication codes. This interrupted workflow and added friction to the sandbox setup process. Automating authentication improves developer experience and enables fully autonomous agent operations.
+
+### Decision: Host-side authentication with token passing
+Integrated @vibe-kit/auth package to handle Claude OAuth authentication on the host machine, then pass tokens to sandboxes via environment variables.
+
+**Implementation Strategy**:
+- **Host Authentication**: One-time OAuth flow on host machine using @vibe-kit/auth
+- **Token Storage**: Store OAuth token in `.env` file as `CLAUDE_CODE_OAUTH_TOKEN`
+- **Token Propagation**: Pass token to DevPod containers via environment variables
+- **Automatic Configuration**: Claude Code detects and uses token without manual intervention
+
+**Key Components**:
+- `scripts/setup-claude-auth.js`: Node.js script using @vibe-kit/auth for OAuth flow
+- `scripts/setup-claude-token.sh`: Shell wrapper for token management (similar to GitHub token setup)
+- Modified `spin-up-sandbox.sh`: Includes Claude token in container environment
+- Updated `auth-setup.sh`: Exports token for Claude Code to detect
+
+### Patterns: OAuth token management approach
+- **Browser Requirement**: Initial authentication requires browser interaction (OAuth security requirement)
+- **Token Persistence**: Tokens stored in `~/.vibekit/claude-oauth-token.json` by @vibe-kit/auth
+- **Token Format**: OAuth bearer tokens with refresh capability
+- **Environment Variable**: `CLAUDE_CODE_OAUTH_TOKEN` recognized by Claude Code CLI
+- **Repository Isolation**: Tokens can be stored per-repository in `.env.<repo-name>`
+
+**Usage Flow**:
+```bash
+# One-time setup on host
+./scripts/setup-claude-token.sh --create-token
+
+# Creates sandbox with automatic Claude auth
+./scripts/spin-up-sandbox.sh
+
+# Claude Code works immediately in sandbox
+devpod ssh <sandbox>
+claude --help  # Already authenticated!
+```
+
+### Issues: OAuth browser interaction requirement
+- **Browser Dependency**: Cannot fully automate initial authentication due to OAuth security model
+- **Token Expiry**: Tokens expire and require refresh (handled automatically by @vibe-kit/auth)
+- **User-Specific**: Tokens are tied to individual Claude accounts, not transferable
+- **Manual Fallback**: If token fails, users can still authenticate manually inside sandbox
+
+### Issues: Resolved authentication hang in setup flow
+- **Initial Problem**: `setup-claude-token.sh --create-token` would hang indefinitely during OAuth flow
+- **Root Cause**: Node.js script `setup-claude-auth.js` had no timeout mechanism for `ClaudeAuth.authenticate()` call
+- **Solution**: Added 5-minute timeout with background process management and better error handling
+- **Technical Fix**: Modified shell script to use `timeout 300` with process monitoring and output capture
+- **UX Improvements**: Added progress indicators, clear timeout messages, and better error reporting
+
+**Fix Details**:
+- Shell script now uses background process with PID tracking for proper timeout handling
+- Node.js script enhanced with try/catch and specific error message handling
+- Fixed .env file formatting issue (missing newlines) that caused token detection failures
+- All non-interactive functionality (token import, help, status check) verified working
+
+### Next: Potential enhancements  
+- **Token Validation**: Add pre-flight check to verify token validity before sandbox creation
+- **Multi-Account Support**: Enable switching between different Claude accounts
+- **Token Rotation**: Automated token refresh scheduling
+- **Integration with CI/CD**: Explore secure token injection for automated workflows
+
+## Sandbox-to-Host Connectivity
+
+### Why: Enable sandboxes to send events to host services
+Sandboxes need to communicate with services running on the host machine (e.g., observability servers, webhook endpoints, development APIs at localhost:4000). Docker's default network isolation prevents containers from accessing host localhost services.
+
+### Decision: Use host.docker.internal with add-host flag
+Implemented `--add-host=host.docker.internal:host-gateway` in devcontainer.json runArgs to enable secure host connectivity.
+
+**Why this approach**:
+- **Security**: Only exposes host to containers, not entire network (unlike --network=host)
+- **Compatibility**: Works with Docker 20.04+ (we have 28.1.1)
+- **Simplicity**: No IP address management or network configuration required
+- **Isolation**: Maintains all other security boundaries (filesystem, capabilities, user isolation)
+
+### Patterns: Accessing host services from sandboxes
+From within any sandbox, services on the host can be accessed via `host.docker.internal`:
+```bash
+# Access host service from sandbox
+curl http://host.docker.internal:4000
+
+# Send events to host observability server
+curl -X POST http://host.docker.internal:4000/events \
+  -H "Content-Type: application/json" \
+  -d '{"event": "task_completed", "workspace": "sandbox-1"}'
+```
+
+**Implementation Details**:
+- Added to `.devcontainer/devcontainer.json` runArgs array
+- Automatically applies to all new sandboxes created via spin-up-sandbox.sh
+- Works with both DevPod and Docker Compose workflows
+- No additional configuration required in sandbox containers
+
+### Issues: Platform-specific considerations
+- **Linux hosts**: Requires Docker 20.04+ and explicit --add-host flag (implemented)
+- **Mac/Windows**: Docker Desktop provides host.docker.internal by default
+- **Port binding**: Host services must listen on 0.0.0.0 or appropriate interface, not just 127.0.0.1
+- **Firewall**: Host firewall rules may block container-to-host traffic
+
+### Next: Potential enhancements
+- Add environment variable for configurable host service URLs
+- Create helper scripts for common webhook patterns
+- Monitor for security implications in production use
+- Consider reverse proxy for multiple host services
+
+## DevPod Web Dashboard
+
+### Why: Modern web interface for workspace monitoring and management
+Users need an intuitive, visual interface to monitor multiple DevPod workspaces simultaneously, view real-time resource usage, and perform common operations without remembering CLI commands. A web dashboard provides better user experience than command-line tools for daily workspace management.
+
+### Decision: React/Node.js dashboard with real-time metrics
+Built a comprehensive web dashboard using modern web technologies that integrates directly with DevPod CLI and Docker APIs.
+
+**Architecture Components**:
+- **Backend (Node.js/Express)**: REST API + WebSocket server for real-time data
+- **Frontend (React + Material-UI)**: Modern responsive interface with live updates
+- **State Management (Zustand)**: Lightweight, reactive state management
+- **Metrics Collection**: Direct integration with Docker stats API
+- **Security**: Rate limiting, input validation, secure command execution
+
+**Key Features**:
+- **Real-time monitoring**: Live CPU, memory, network, disk usage via WebSockets
+- **Workspace operations**: Start, stop, delete workspaces with one click
+- **SSH access**: Copy SSH commands to clipboard (`devpod ssh <workspace-name>`)
+- **Visual metrics**: Charts and progress bars for resource usage
+- **System overview**: Summary of all workspace resource consumption
+- **Responsive design**: Works on desktop, tablet, and mobile devices
+
+### Patterns: Secure DevPod CLI integration approach
+- **Safe command execution**: Uses `child_process.spawn` with argument arrays to prevent injection
+- **Input validation**: Workspace names validated with regex patterns (`^claude-sandbox-[a-zA-Z0-9_-]+$`)
+- **Container correlation**: Uses Docker mount inspection to accurately map workspaces to containers
+- **Real-time updates**: WebSocket subscriptions for efficient metrics streaming
+- **Error handling**: Comprehensive error handling with user-friendly messages
+
+**Technical Implementation**:
+```bash
+# Start dashboard
+cd dashboard
+npm run install:all
+npm start
+# Access at http://localhost:3001
+```
+
+**API Endpoints**:
+- `GET /api/workspaces` - List all DevPod workspaces (calls `devpod list --output json`)
+- `GET /api/workspaces/:name/metrics` - Get container stats (uses Docker API)
+- `POST /api/workspaces/:name/start` - Start workspace (`devpod up <name>`)
+- `POST /api/workspaces/:name/stop` - Stop workspace (`devpod stop <name>`)
+- `DELETE /api/workspaces/:name` - Delete workspace (`devpod delete <name> --force`)
+
+**WebSocket Events**:
+- Subscribe: `{"type": "subscribe", "workspaceName": "..."}`
+- Metrics: `{"type": "metrics", "workspaceName": "...", "data": {...}}`
+
+### Issues: DevPod API limitations and workarounds
+- **No native HTTP API**: DevPod is CLI-only, dashboard wraps commands with JSON output
+- **Real-time events**: No DevPod event streams, uses polling + WebSocket forwarding
+- **Container mapping**: Uses mount inspection (`docker inspect`) to correlate workspaces to containers
+- **Error handling**: Must parse CLI stderr/stdout for operation status
+
+**Security Considerations**:
+- Rate limiting (100 requests per 15 minutes per IP)
+- Workspace name validation prevents path traversal
+- No shell injection via spawn argument arrays
+- CORS and Helmet middleware for web security
+- WebSocket connection cleanup prevents memory leaks
+
+### Patterns: Modern dashboard architecture
+- **Component isolation**: Each workspace card manages its own state and metrics subscription
+- **Real-time data flow**: WebSocket → Zustand store → React components
+- **Material-UI integration**: Consistent design system with dark theme
+- **Performance optimization**: Metrics buffering, efficient re-renders
+- **Mobile responsive**: Grid layout adapts to screen sizes
+
+**Directory Structure**:
+```
+dashboard/
+├── server.js              # Express server + WebSocket
+├── package.json           # Backend dependencies
+├── frontend/
+│   ├── src/
+│   │   ├── App.js         # Main dashboard app
+│   │   ├── store/         # Zustand state management
+│   │   └── components/    # React components
+│   └── package.json       # Frontend dependencies
+└── README.md              # Setup and usage docs
+```
+
+### Next: Enhancement opportunities
+- **Historical metrics**: Store time-series data for workspace performance trends
+- **Alerts system**: Notifications for high resource usage or workspace failures
+- **Batch operations**: Multi-select for bulk start/stop/delete operations
+- **Custom metrics**: Integration with application-specific monitoring
+- **User authentication**: Multi-user access with role-based permissions
+- **GitOps integration**: Automatic workspace creation from repository webhooks

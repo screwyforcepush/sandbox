@@ -22,7 +22,8 @@
   "securityOpt": [],
   "runArgs": [
     "--cap-drop=SYS_ADMIN",
-    "--cap-drop=NET_ADMIN"
+    "--cap-drop=NET_ADMIN",
+    "--add-host=host.docker.internal:host-gateway"
   ],
   
   // Environment variables - Only expose what's needed
@@ -33,7 +34,8 @@
     "REPO_NAME": "${localEnv:REPO_NAME}",
     "BRANCH_NAME": "${localEnv:BRANCH_NAME:main}",
     "SANDBOX_MODE": "true",
-    "GH_TOKEN": "${localEnv:GITHUB_TOKEN}"
+    "GH_TOKEN": "${localEnv:GITHUB_TOKEN}",
+    "CLAUDE_CODE_OAUTH_TOKEN": "${localEnv:CLAUDE_CODE_OAUTH_TOKEN}"
   },
   
   // Post-create command to set up the repository and authenticate tools

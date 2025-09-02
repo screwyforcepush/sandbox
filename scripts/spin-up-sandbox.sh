@@ -158,6 +158,11 @@ load_env() {
             REPO_NAME="${REPO_ARG##*/}"
             REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
         fi
+        
+        # Check for Claude token in environment
+        if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+            echo "🔑 Claude authentication token found"
+        fi
     fi
 }
 
@@ -207,6 +212,10 @@ create_temp_env_file() {
         echo "REPO_OWNER=${REPO_OWNER}"
         echo "REPO_NAME=${REPO_NAME}"
         echo "BRANCH_NAME=${BRANCH_ARG}"
+        # Include Claude token if available
+        if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+            echo "CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}"
+        fi
     } > "${temp_env_file}"
     
     chmod 600 "${temp_env_file}"
@@ -278,6 +287,9 @@ create_sandbox() {
     echo "   ✓ Running as non-root user with sudo in container"
     echo "   ✓ No host privilege escalation"
     echo "   ✓ GitHub PAT (global scope - standard for all GitHub PATs)"
+    if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+        echo "   ✓ Claude authentication configured"
+    fi
     echo "   ✓ Token not exposed in process list"
     echo "   ✓ Isolated network namespace"
     echo "   ✓ No host filesystem access"
