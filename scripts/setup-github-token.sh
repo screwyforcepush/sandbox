@@ -15,18 +15,21 @@ show_help() {
     echo "Usage: $0 [options]"
     echo ""
     echo "Options:"
-    echo "  --repo owner/name              Specify repository (e.g., facebook/react)"
+    echo "  --repo owner/name              Specify repository (stores in .env.<repo-name>)"
     echo "  --token TOKEN                  Use an existing GitHub PAT token"
     echo "  --create-token                 Create a new GitHub PAT (global scope)"
     echo "  --yes                          Skip confirmation prompts (use with caution)"
     echo "  --help                         Show this help message"
     echo ""
     echo "Examples:"
-    echo "  # Use existing PAT"
+    echo "  # Store in global .env file (no repo specified)"
+    echo "  $0 --token ghp_xxxxxxxxxxxx"
+    echo ""
+    echo "  # Store in repo-specific .env.<repo-name> file"
     echo "  $0 --repo owner/name --token ghp_xxxxxxxxxxxx"
     echo ""
-    echo "  # Create new PAT"
-    echo "  $0 --repo owner/name --create-token"
+    echo "  # Create new PAT and store globally"
+    echo "  $0 --create-token"
     echo ""
     echo "To create a PAT manually:"
     echo "  1. Go to https://github.com/settings/tokens/new"
@@ -155,9 +158,12 @@ if [ -n "$USE_EXISTING_TOKEN" ]; then
     
     if validate_token "$USE_EXISTING_TOKEN"; then
         # Create or update .env file
-        ENV_FILE=".env"
+        # When no repo specified, store in global .env file
+        # When repo specified, store in repo-specific .env.<repo-name> file
         if [ -n "$REPO_ARG" ]; then
             ENV_FILE=".env.${REPO_NAME}"
+        else
+            ENV_FILE=".env"
         fi
         
         save_token "$USE_EXISTING_TOKEN" "$ENV_FILE"
@@ -226,9 +232,12 @@ elif [ "$CREATE_TOKEN" = true ]; then
     fi
     
     # Create or update .env file
-    ENV_FILE=".env"
+    # When no repo specified, store in global .env file
+    # When repo specified, store in repo-specific .env.<repo-name> file
     if [ -n "$REPO_ARG" ]; then
         ENV_FILE=".env.${REPO_NAME}"
+    else
+        ENV_FILE=".env"
     fi
     
     save_token "$TOKEN" "$ENV_FILE"

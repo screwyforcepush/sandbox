@@ -337,6 +337,15 @@ devpod logs <sandbox-name>
   - `.env` for current repository
   - `.env.<repo-name>` for external repositories
 
+### Workspace Naming
+
+DevPod enforces a 48-character limit on workspace names. The system automatically truncates long repository names:
+
+- **Format**: `claude-sandbox-{repo}-YYYYMMDD-HHMMSS`
+- **Repo name limit**: 17 characters (truncated if longer)
+- **Example**: `screwyforcepush/claude-code-subagent-bus` → `claude-sandbox-claude-code-subag-20250903-200807`
+- **Collision handling**: Timestamp suffix prevents conflicts
+
 ### Security Model
 
 - Containers run as non-root user (`vscode`) with limited capabilities
@@ -348,13 +357,33 @@ devpod logs <sandbox-name>
 
 ### Token Management
 
-The `setup-github-token.sh` script supports GitHub Personal Access Tokens (PATs):
+The `setup-github-token.sh` script supports GitHub Personal Access Tokens (PATs) with flexible storage options:
+
+**Token Storage Options**:
+- **Global Storage**: `./scripts/setup-github-token.sh --token <token>` → stores in `.env`
+- **Repository-Specific**: `./scripts/setup-github-token.sh --repo owner/name --token <token>` → stores in `.env.<repo-name>`
+
+**Token Fallback Logic** (in `spin-up-sandbox.sh`):
+1. **Repo specified**: Try `.env.<repo-name>` first, fallback to global `.env`
+2. **No repo specified**: Use global `.env`
+3. **Command-line token**: `--token` flag overrides all .env files
 
 **GitHub Personal Access Tokens**
 - Created via GitHub web UI: https://github.com/settings/tokens/new
 - Have global scope (access to all repositories in your account)
 - Required scopes: `repo` and `workflow`
-- Use with: `./scripts/setup-github-token.sh --repo owner/name --token ghp_xxxxxxxxxxxx`
+
+**Examples**:
+```bash
+# Global token (works for any repo)
+./scripts/setup-github-token.sh --token ghp_xxxxxxxxxxxx
+
+# Repository-specific token
+./scripts/setup-github-token.sh --repo owner/name --token ghp_xxxxxxxxxxxx
+
+# Sandbox creation with fallback
+./scripts/spin-up-sandbox.sh --repo owner/name  # Uses .env.name OR .env
+```
 
 **Important Security Note**: All GitHub PATs have global scope and can access every repository you have access to. This is how GitHub authentication works - tokens cannot be limited to specific repositories.
 
@@ -375,7 +404,7 @@ Tokens are stored in `.env` files (gitignored) and passed to containers via envi
    - Git is configured to use HTTPS with the PAT token for push/pull operations
    - Claude Code is installed and ready (requires API key for full functionality)
 
-4. **Environment Variables**: Containers receive: GITHUB_TOKEN, REPO_URL, REPO_OWNER, REPO_NAME, BRANCH_NAME, GH_TOKEN
+4. **Environment Variables**: Containers receive: GITHUB_TOKEN, REPO_URL, REPO_OWNER, REPO_NAME, BRANCH_NAME, GH_TOKEN, CLAUDE_COMMS_SERVER
 
 5. **Git Configuration**: For external repos, the script clones to a temp directory and copies the .devcontainer config into it before creating the DevPod workspace.
 
@@ -537,70 +566,45 @@ claude-sandbox-webtrack-2025...  owner/repo@branch                 RUNNING  1.2G
 - Consider timestamp-based correlation for better accuracy with concurrent sandboxes
 - Add container name/ID display for debugging purposes
 
-## Claude Authentication Integration
+## CLAUDE_COMMS_SERVER Environment Variable
 
-### Why: Eliminate manual authentication flow in sandboxes
-Users previously had to manually run `claude auth login` in each sandbox, opening a browser and copying authentication codes. This interrupted workflow and added friction to the sandbox setup process. Automating authentication improves developer experience and enables fully autonomous agent operations.
+### Why: Enable sandbox-to-host communication for agent coordination
+Sandboxes need to send events and status updates to host services (e.g., observability servers, coordination services). The CLAUDE_COMMS_SERVER environment variable provides a standardized way to configure the host communication endpoint.
 
-### Decision: Host-side authentication with token passing
-Integrated @vibe-kit/auth package to handle Claude OAuth authentication on the host machine, then pass tokens to sandboxes via environment variables.
+### Decision: Add CLAUDE_COMMS_SERVER to DevPod environment variable configuration
+Added CLAUDE_COMMS_SERVER to both devcontainer.json and spin-up-sandbox.sh to enable flexible host communication configuration.
 
-**Implementation Strategy**:
-- **Host Authentication**: One-time OAuth flow on host machine using @vibe-kit/auth
-- **Token Storage**: Store OAuth token in `.env` file as `CLAUDE_CODE_OAUTH_TOKEN`
-- **Token Propagation**: Pass token to DevPod containers via environment variables
-- **Automatic Configuration**: Claude Code detects and uses token without manual intervention
+**Implementation Details**:
+- **DevContainer**: Added to `.devcontainer/devcontainer.json` containerEnv section as `"CLAUDE_COMMS_SERVER": "${localEnv:CLAUDE_COMMS_SERVER}"`
+- **DevPod Script**: Added conditional inclusion in `spin-up-sandbox.sh` create_temp_env_file() function
+- **Default Value**: Expected to be `http://host.docker.internal:4000` (leverages existing host connectivity)
+- **Optional**: Only included if set in host environment (fails gracefully if not configured)
 
-**Key Components**:
-- `scripts/setup-claude-auth.js`: Node.js script using @vibe-kit/auth for OAuth flow
-- `scripts/setup-claude-token.sh`: Shell wrapper for token management (similar to GitHub token setup)
-- Modified `spin-up-sandbox.sh`: Includes Claude token in container environment
-- Updated `auth-setup.sh`: Exports token for Claude Code to detect
-
-### Patterns: OAuth token management approach
-- **Browser Requirement**: Initial authentication requires browser interaction (OAuth security requirement)
-- **Token Persistence**: Tokens stored in `~/.vibekit/claude-oauth-token.json` by @vibe-kit/auth
-- **Token Format**: OAuth bearer tokens with refresh capability
-- **Environment Variable**: `CLAUDE_CODE_OAUTH_TOKEN` recognized by Claude Code CLI
-- **Repository Isolation**: Tokens can be stored per-repository in `.env.<repo-name>`
-
-**Usage Flow**:
+### Patterns: Host communication setup
 ```bash
-# One-time setup on host
-./scripts/setup-claude-token.sh --create-token
-
-# Creates sandbox with automatic Claude auth
+# Set in host environment before creating sandbox
+export CLAUDE_COMMS_SERVER=http://host.docker.internal:4000
 ./scripts/spin-up-sandbox.sh
 
-# Claude Code works immediately in sandbox
-devpod ssh <sandbox>
-claude --help  # Already authenticated!
+# Available inside sandbox for agent communication
+curl -X POST $CLAUDE_COMMS_SERVER/events -d '{"status": "ready"}'
 ```
 
-### Issues: OAuth browser interaction requirement
-- **Browser Dependency**: Cannot fully automate initial authentication due to OAuth security model
-- **Token Expiry**: Tokens expire and require refresh (handled automatically by @vibe-kit/auth)
-- **User-Specific**: Tokens are tied to individual Claude accounts, not transferable
-- **Manual Fallback**: If token fails, users can still authenticate manually inside sandbox
+**Integration with existing host connectivity**:
+- Leverages existing `--add-host=host.docker.internal:host-gateway` configuration
+- No additional network setup required
+- Works with existing security model (container-to-host only)
 
-### Issues: Resolved authentication hang in setup flow
-- **Initial Problem**: `setup-claude-token.sh --create-token` would hang indefinitely during OAuth flow
-- **Root Cause**: Node.js script `setup-claude-auth.js` had no timeout mechanism for `ClaudeAuth.authenticate()` call
-- **Solution**: Added 5-minute timeout with background process management and better error handling
-- **Technical Fix**: Modified shell script to use `timeout 300` with process monitoring and output capture
-- **UX Improvements**: Added progress indicators, clear timeout messages, and better error reporting
+### Issues: None - follows existing environment variable patterns
+- Uses same conditional inclusion pattern as other environment variables
+- Maintains backward compatibility (optional environment variable)
+- No breaking changes to existing sandbox creation process
 
-**Fix Details**:
-- Shell script now uses background process with PID tracking for proper timeout handling
-- Node.js script enhanced with try/catch and specific error message handling
-- Fixed .env file formatting issue (missing newlines) that caused token detection failures
-- All non-interactive functionality (token import, help, status check) verified working
+### Next: Monitor usage patterns and consider additional host communication features
+- Track common communication patterns between sandboxes and host services
+- Consider standardized event format for agent coordination
+- No immediate changes planned - basic functionality covers current needs
 
-### Next: Potential enhancements  
-- **Token Validation**: Add pre-flight check to verify token validity before sandbox creation
-- **Multi-Account Support**: Enable switching between different Claude accounts
-- **Token Rotation**: Automated token refresh scheduling
-- **Integration with CI/CD**: Explore secure token injection for automated workflows
 
 ## Sandbox-to-Host Connectivity
 

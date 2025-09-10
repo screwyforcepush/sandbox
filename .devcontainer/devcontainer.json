@@ -35,7 +35,7 @@
     "BRANCH_NAME": "${localEnv:BRANCH_NAME:main}",
     "SANDBOX_MODE": "true",
     "GH_TOKEN": "${localEnv:GITHUB_TOKEN}",
-    "CLAUDE_CODE_OAUTH_TOKEN": "${localEnv:CLAUDE_CODE_OAUTH_TOKEN}"
+    "CLAUDE_COMMS_SERVER": "http://host.docker.internal:4000"
   },
   
   // Post-create command to set up the repository and authenticate tools

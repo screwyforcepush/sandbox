@@ -89,31 +89,8 @@ fi
 
 echo ""
 
-# Step 3: Set up Claude authentication (optional)
-echo "📋 Step 3: Setting up Claude authentication (optional)..."
-echo ""
-
-if [ -f .env ] && grep -q "^CLAUDE_CODE_OAUTH_TOKEN=" .env 2>/dev/null; then
-    echo "✅ Claude authentication already configured"
-    echo "   Claude Code will work without manual login in sandboxes"
-elif [ -f .env.claude ] && grep -q "^CLAUDE_CODE_OAUTH_TOKEN=" .env.claude 2>/dev/null; then
-    echo "✅ Claude authentication configured in .env.claude"
-    echo "   Claude Code will work without manual login in sandboxes"
-else
-    echo "🤖 Claude authentication allows sandboxes to use Claude Code without manual login"
-    echo ""
-    echo "To set up Claude authentication:"
-    echo "   ./scripts/setup-claude-token.sh --create-token"
-    echo ""
-    echo "This is optional - you can always authenticate manually inside sandboxes"
-    echo ""
-    read -p "Press Enter to skip Claude setup and continue, or Ctrl+C to exit and set it up first... "
-fi
-
-echo ""
-
-# Step 4: Launch with DevPod
-echo "📋 Step 4: Launching sandbox with DevPod..."
+# Step 3: Launch with DevPod
+echo "📋 Step 3: Launching sandbox with DevPod..."
 echo ""
 
 if ! command_exists devpod; then
@@ -139,9 +116,6 @@ echo ""
 echo "🔐 Security reminder:"
 if [ -f .env ] && grep -q "^GITHUB_TOKEN=ghp_" .env 2>/dev/null; then
     echo "   ✓ GitHub PAT configured (global scope - standard for all GitHub PATs)"
-fi
-if [ -f .env ] && grep -q "^CLAUDE_CODE_OAUTH_TOKEN=" .env 2>/dev/null; then
-    echo "   ✓ Claude authentication configured (OAuth token)"
 fi
 echo ""
 echo "Happy coding! 🎉"

@@ -92,10 +92,12 @@ sudo apt-get install -y --no-install-recommends \
 echo "📦 Installing uv (fast Python package manager)..."
 curl -LsSf https://astral.sh/uv/install.sh | sh > /dev/null 2>&1
 
-# Source the uv environment to make it available immediately
-if [ -f "$HOME/.cargo/env" ]; then
-    . "$HOME/.cargo/env"
-fi
+# Add uv to PATH immediately
+export PATH="$PATH:$HOME/.local/bin"
+
+# Install common Python packages including requests
+echo "📦 Installing common Python packages..."
+sudo apt-get install -y --no-install-recommends python3-requests > /dev/null 2>&1
 
 echo ""
 echo "✅ Sandbox environment ready!"
@@ -114,9 +116,10 @@ echo "   - Isolated environment"
 echo ""
 echo "📦 Package installation:"
 echo "   - System packages: sudo apt-get install <package>"
-echo "   - Python packages: uv pip install <package> (or pip install <package>)"
+echo "   - Python packages: uv pip install <package> (in venv) or pip install <package>"
 echo "   - Node packages: npm install [-g] <package>"
 echo "   - Fast Python tools: uv venv, uv pip, uv run"
+echo "   - Pre-installed: python3-requests library available globally"
 echo "   - Any other tools the agent needs!"
 
 # Configure locale settings in user's bashrc
@@ -128,9 +131,7 @@ echo "export LC_ALL=en_US.UTF-8" >> ~/.bashrc
 # Add uv to PATH in bashrc for future sessions
 echo "" >> ~/.bashrc
 echo "# Add uv to PATH" >> ~/.bashrc
-echo 'if [ -f "$HOME/.cargo/env" ]; then' >> ~/.bashrc
-echo '    . "$HOME/.cargo/env"' >> ~/.bashrc
-echo 'fi' >> ~/.bashrc
+echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.bashrc
 
 echo ""
 echo "🌍 Locale configured: en_US.UTF-8"
@@ -138,4 +139,3 @@ echo "⚡ uv installed: Fast Python package management available"
 
 # Clear sensitive tokens from environment
 unset GITHUB_TOKEN
-unset CLAUDE_CODE_OAUTH_TOKEN

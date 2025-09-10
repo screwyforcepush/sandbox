@@ -126,21 +126,33 @@ load_env() {
         echo "🔑 Using provided token"
         echo "✅ Using GitHub PAT (global scope)"
     else
-        # Load from .env file
+        # Load from .env file with fallback logic
         if [ -n "$REPO_ARG" ]; then
             local repo_name="${REPO_ARG##*/}"
             if [ -f ".env.${repo_name}" ]; then
                 ENV_FILE=".env.${repo_name}"
+                echo "🔑 Using repo-specific token (.env.${repo_name})"
+            elif [ -f ".env" ]; then
+                ENV_FILE=".env"
+                echo "🔑 Using global token (.env) - no repo-specific token found"
             else
-                echo "❌ .env.${repo_name} file not found."
-                echo "   Run: ./scripts/setup-github-token.sh --repo ${REPO_ARG}"
-                echo "   Or use: $0 --repo ${REPO_ARG} --token <your-token>"
+                echo "❌ No token file found."
+                echo "   Repo-specific: .env.${repo_name} (not found)"
+                echo "   Global: .env (not found)"
+                echo ""
+                echo "   Setup options:"
+                echo "   - Repo-specific: ./scripts/setup-github-token.sh --repo ${REPO_ARG}"
+                echo "   - Global: ./scripts/setup-github-token.sh --token <your-token>"
+                echo "   - Or use: $0 --repo ${REPO_ARG} --token <your-token>"
                 exit 1
             fi
         else
-            if [ ! -f ".env" ]; then
+            if [ -f ".env" ]; then
+                ENV_FILE=".env"
+                echo "🔑 Using global token (.env)"
+            else
                 echo "❌ .env file not found."
-                echo "   Run: ./scripts/setup-github-token.sh"
+                echo "   Run: ./scripts/setup-github-token.sh --token <your-token>"
                 echo "   Or use: $0 --token <your-token>"
                 exit 1
             fi
@@ -159,10 +171,6 @@ load_env() {
             REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
         fi
         
-        # Check for Claude token in environment
-        if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
-            echo "🔑 Claude authentication token found"
-        fi
     fi
 }
 
@@ -212,10 +220,8 @@ create_temp_env_file() {
         echo "REPO_OWNER=${REPO_OWNER}"
         echo "REPO_NAME=${REPO_NAME}"
         echo "BRANCH_NAME=${BRANCH_ARG}"
-        # Include Claude token if available
-        if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
-            echo "CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}"
-        fi
+        # Include Claude communications server
+        echo "CLAUDE_COMMS_SERVER=http://host.docker.internal:4000"
     } > "${temp_env_file}"
     
     chmod 600 "${temp_env_file}"
@@ -224,7 +230,13 @@ create_temp_env_file() {
 
 # Create and start sandbox
 create_sandbox() {
-    local workspace_name="claude-sandbox-${REPO_NAME:-local}-$(date +%Y%m%d-%H%M%S)"
+    # Truncate repo name to fit DevPod's 48-character workspace name limit
+    # Format: claude-sandbox-{repo}-YYYYMMDD-HHMMSS (15 + repo + 16 = 31 + repo)
+    local repo_name_truncated="${REPO_NAME:-local}"
+    if [ ${#repo_name_truncated} -gt 17 ]; then
+        repo_name_truncated="${repo_name_truncated:0:17}"
+    fi
+    local workspace_name="claude-sandbox-${repo_name_truncated}-$(date +%Y%m%d-%H%M%S)"
     local temp_env_file
     
     echo ""
@@ -287,9 +299,6 @@ create_sandbox() {
     echo "   ✓ Running as non-root user with sudo in container"
     echo "   ✓ No host privilege escalation"
     echo "   ✓ GitHub PAT (global scope - standard for all GitHub PATs)"
-    if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
-        echo "   ✓ Claude authentication configured"
-    fi
     echo "   ✓ Token not exposed in process list"
     echo "   ✓ Isolated network namespace"
     echo "   ✓ No host filesystem access"

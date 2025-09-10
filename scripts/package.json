@@ -1,9 +1,0 @@
-{
-  "name": "claude-sandbox-scripts",
-  "version": "1.0.0",
-  "description": "Scripts for Claude Agent Sandbox authentication",
-  "private": true,
-  "dependencies": {
-    "@vibe-kit/auth": "^0.9.0"
-  }
-}
