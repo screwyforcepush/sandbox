@@ -35,9 +35,13 @@
     "BRANCH_NAME": "${localEnv:BRANCH_NAME:main}",
     "SANDBOX_MODE": "true",
     "GH_TOKEN": "${localEnv:GITHUB_TOKEN}",
-    "CLAUDE_COMMS_SERVER": "http://host.docker.internal:4000"
+    "CLAUDE_COMMS_SERVER": "http://host.docker.internal:4000",
+    "CLAUDE_PROJECT_ROOT": "/workspaces/${localEnv:REPO_NAME}/"
   },
   
+  // Port forwarding
+  "forwardPorts": [3000, 6006],
+
   // Post-create command to set up the repository and authenticate tools
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   

@@ -741,3 +741,64 @@ dashboard/
 - **Custom metrics**: Integration with application-specific monitoring
 - **User authentication**: Multi-user access with role-based permissions
 - **GitOps integration**: Automatic workspace creation from repository webhooks
+
+## Accessing Development Servers from Host
+
+### Why: Need to access web services running inside sandboxes from host browser
+Development workflows often involve running web servers (Vite, webpack-dev-server, Storybook, etc.) inside sandboxes on ports like 6006, 3000, 8080. Developers need to access these from their host browser without network isolation issues.
+
+### Decision: Use forwardPorts in devcontainer.json for automatic port forwarding
+Added `"forwardPorts": [6006]` to `.devcontainer/devcontainer.json` to enable DevPod's automatic port forwarding feature.
+
+**Why this approach**:
+- **Simplicity**: DevPod handles port forwarding automatically when workspace starts
+- **Cross-platform**: Works identically on macOS, Linux, and Windows
+- **Clean URLs**: Access via `http://localhost:6006` on host, no IP address lookups needed
+- **No DNS hacks**: Avoids complex reverse proxy or hosts file manipulation
+- **Standard practice**: This is the recommended approach for container-based development
+
+**Alternatives considered**:
+- **Container hostname access** (e.g., `container.localhost`): No standard Docker solution exists without complex DNS/proxy setup
+- **Direct container IP access**: Linux-only, requires manual IP lookups, breaks on container restart
+- **Reverse proxy (nginx/traefik)**: Adds unnecessary complexity for development workflow
+- **Host networking mode**: Removes isolation, Linux-only, security concerns
+
+### Patterns: Development server configuration
+For port forwarding to work, development servers inside the container must bind to `0.0.0.0` (all interfaces) rather than `127.0.0.1` (localhost only).
+
+**Common dev server configurations**:
+```bash
+# Vite
+vite --host 0.0.0.0
+
+# webpack-dev-server
+webpack serve --host 0.0.0.0
+
+# Storybook
+npm run storybook -- --host 0.0.0.0
+
+# Node.js/Express
+app.listen(6006, '0.0.0.0')
+
+# Python Flask
+flask run --host=0.0.0.0
+
+# Generic: Most dev servers accept --host flag
+<command> --host 0.0.0.0 --port 6006
+```
+
+**Client-side code considerations**:
+- Use relative URLs (`/api/data`) instead of absolute URLs (`http://localhost:3000/api/data`)
+- Use `window.location.origin` for dynamic base URLs
+- Avoid hardcoding `localhost` in client code
+
+### Issues: Common troubleshooting
+- **Can't access forwarded port**: Check that dev server binds to `0.0.0.0`, not `127.0.0.1`
+- **Port already in use**: Choose different port or stop conflicting service on host
+- **Existing sandboxes**: Must recreate workspace after adding `forwardPorts` to devcontainer.json
+- **Multiple ports**: Add array to devcontainer.json: `"forwardPorts": [3000, 6006, 8080]`
+
+### Next: Consider adding common development ports
+- Could add frequently-used ports to default devcontainer.json configuration
+- Document port forwarding setup in quickstart guide
+- No immediate changes planned - current approach covers typical use cases

@@ -118,8 +118,8 @@ get_container_stats() {
     echo "${stats_output}|${container_id:0:12}|${container_name}|RUNNING"
 }
 
-# Get list of claude sandboxes
-sandbox_data=$(devpod list | grep -E "claude-sandbox-" || echo "")
+# Get list of claude sandboxes (both old and new naming)
+sandbox_data=$(devpod list | grep -E "(claude-sandbox-|csb-)" || echo "")
 
 if [[ -z "$sandbox_data" ]]; then
     echo "No active sandboxes found."

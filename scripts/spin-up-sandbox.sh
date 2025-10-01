@@ -231,12 +231,12 @@ create_temp_env_file() {
 # Create and start sandbox
 create_sandbox() {
     # Truncate repo name to fit DevPod's 48-character workspace name limit
-    # Format: claude-sandbox-{repo}-YYYYMMDD-HHMMSS (15 + repo + 16 = 31 + repo)
+    # Format: csb-{repo}-YYYYMMDD-HHMMSS (4 + repo + 16 = 20 + repo)
     local repo_name_truncated="${REPO_NAME:-local}"
-    if [ ${#repo_name_truncated} -gt 17 ]; then
-        repo_name_truncated="${repo_name_truncated:0:17}"
+    if [ ${#repo_name_truncated} -gt 28 ]; then
+        repo_name_truncated="${repo_name_truncated:0:28}"
     fi
-    local workspace_name="claude-sandbox-${repo_name_truncated}-$(date +%Y%m%d-%H%M%S)"
+    local workspace_name="csb-${repo_name_truncated}-$(date +%Y%m%d-%H%M%S)"
     local temp_env_file
     
     echo ""

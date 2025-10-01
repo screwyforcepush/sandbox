@@ -11,7 +11,7 @@ if ! command -v devpod &> /dev/null; then
 fi
 
 echo "Finding all Claude sandboxes..."
-sandboxes=$(devpod list --output json | jq -r '.[] | select(.id | contains("claude-sandbox-")) | .id' 2>/dev/null || echo "")
+sandboxes=$(devpod list --output json | jq -r '.[] | select(.id | contains("claude-sandbox-") or contains("csb-")) | .id' 2>/dev/null || echo "")
 
 if [ -z "$sandboxes" ]; then
     echo "✓ No sandboxes to clean up."

@@ -77,7 +77,7 @@ function runCommand(command, args = [], options = {}) {
 
 // Validate workspace name (security)
 function validateWorkspaceName(name) {
-  return /^claude-sandbox-[a-zA-Z0-9_-]+$/.test(name);
+  return /^(claude-sandbox-|csb-)[a-zA-Z0-9_-]+$/.test(name);
 }
 
 // API Routes
@@ -98,9 +98,9 @@ app.get('/api/workspaces', async (req, res) => {
     const { stdout } = await runCommand('devpod', ['list', '--output', 'json']);
     const workspaces = JSON.parse(stdout || '[]');
     
-    // Filter for claude sandboxes only
-    const claudeSandboxes = workspaces.filter(w => 
-      w.id && w.id.includes('claude-sandbox-')
+    // Filter for claude sandboxes only (both old and new naming)
+    const claudeSandboxes = workspaces.filter(w =>
+      w.id && (w.id.includes('claude-sandbox-') || w.id.includes('csb-'))
     );
     
     // Enrich workspaces with status in parallel

@@ -95,9 +95,13 @@ curl -LsSf https://astral.sh/uv/install.sh | sh > /dev/null 2>&1
 # Add uv to PATH immediately
 export PATH="$PATH:$HOME/.local/bin"
 
-# Install common Python packages including requests
+# Install common Python packages including requests and tiktoken
 echo "📦 Installing common Python packages..."
 sudo apt-get install -y --no-install-recommends python3-requests > /dev/null 2>&1
+
+# Install tiktoken using pip with --break-system-packages flag  
+echo "📦 Installing tiktoken..."
+pip3 install --break-system-packages tiktoken > /dev/null 2>&1
 
 echo ""
 echo "✅ Sandbox environment ready!"
