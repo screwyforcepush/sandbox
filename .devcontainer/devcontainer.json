@@ -23,7 +23,8 @@
   "runArgs": [
     "--cap-drop=SYS_ADMIN",
     "--cap-drop=NET_ADMIN",
-    "--add-host=host.docker.internal:host-gateway"
+    "--add-host=host.docker.internal:host-gateway",
+    "--shm-size=1g"
   ],
   
   // Environment variables - Only expose what's needed
