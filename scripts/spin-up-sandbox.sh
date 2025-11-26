@@ -222,6 +222,26 @@ create_temp_env_file() {
         echo "BRANCH_NAME=${BRANCH_ARG}"
         # Include Claude communications server
         echo "CLAUDE_COMMS_SERVER=http://host.docker.internal:4000"
+        # Include Perplexity API key if available
+        if [ -n "${PERPLEXITY_API_KEY:-}" ]; then
+            echo "PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}"
+        fi
+        # Include Codex auth JSON if available
+        if [ -n "${CODEX_AUTH_JSON:-}" ]; then
+            echo "CODEX_AUTH_JSON=${CODEX_AUTH_JSON}"
+        fi
+        # Include Convex access token if available
+        if [ -n "${CONVEX_ACCESS_TOKEN:-}" ]; then
+            echo "CONVEX_ACCESS_TOKEN=${CONVEX_ACCESS_TOKEN}"
+        fi
+        # Include Google API key if available
+        if [ -n "${GOOGLE_API_KEY:-}" ]; then
+            echo "GOOGLE_API_KEY=${GOOGLE_API_KEY}"
+        fi
+        # Include Google Vertex AI flag if available
+        if [ -n "${GOOGLE_GENAI_USE_VERTEXAI:-}" ]; then
+            echo "GOOGLE_GENAI_USE_VERTEXAI=${GOOGLE_GENAI_USE_VERTEXAI}"
+        fi
     } > "${temp_env_file}"
     
     chmod 600 "${temp_env_file}"

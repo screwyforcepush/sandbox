@@ -86,6 +86,8 @@ sudo apt-get install -y --no-install-recommends \
     python3-pip \
     vim \
     tmux \
+    ripgrep \
+    chromium \
     > /dev/null 2>&1
 
 # Install uv - Fast Python package manager
@@ -141,5 +143,101 @@ echo ""
 echo "🌍 Locale configured: en_US.UTF-8"
 echo "⚡ uv installed: Fast Python package management available"
 
+# Install Chrome MCP wrapper for containerized environments
+echo ""
+echo "🌐 Installing Chrome MCP wrapper..."
+echo '#!/usr/bin/env bash
+# Chrome wrapper for MCP in containerized environments
+# Required: --no-sandbox flag for Docker/devcontainer compatibility
+exec /usr/bin/chromium --no-sandbox "$@"' | sudo tee /usr/local/bin/chromium-mcp > /dev/null
+sudo chmod +x /usr/local/bin/chromium-mcp
+echo "✅ Chrome MCP wrapper installed at /usr/local/bin/chromium-mcp"
+
+# Install Claude MCP servers
+echo ""
+echo "🔌 Installing Claude MCP servers..."
+
+# Install Perplexity Ask MCP server if API key is available
+if [ -n "${PERPLEXITY_API_KEY:-}" ]; then
+    echo "   Installing perplexity-ask MCP server..."
+    claude mcp add perplexity-ask --scope user -- env PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY}" npx -y server-perplexity-ask
+    echo "   ✅ perplexity-ask MCP server installed"
+else
+    echo "   ⚠️  Skipping perplexity-ask (no PERPLEXITY_API_KEY found)"
+fi
+
+echo ""
+echo "✅ Claude MCP servers configured"
+
+# Install Codex
+echo ""
+echo "🤖 Installing Codex..."
+npm install -g @openai/codex > /dev/null 2>&1
+echo "   ✅ Codex installed"
+
+# Install Gemini CLI
+echo ""
+echo "💎 Installing Gemini CLI..."
+npm install -g @google/gemini-cli@latest > /dev/null 2>&1
+echo "   ✅ Gemini CLI installed"
+
+# Install ast-grep
+echo ""
+echo "🔍 Installing ast-grep..."
+npm install -g @ast-grep/cli > /dev/null 2>&1
+echo "   ✅ ast-grep installed"
+
+# Create Codex configuration directory
+mkdir -p ~/.codex
+
+# Create Codex config.toml
+echo "   Creating Codex configuration..."
+cat > ~/.codex/config.toml <<EOF
+model_reasoning_effort = "high"
+ask-for-approval = "never"
+sandbox_mode = "danger-full-access"
+trust_level = "trusted"
+
+
+[mcp_servers."chrome-devtools"]
+command = "npx"
+args = ["chrome-devtools-mcp@latest", "--executablePath=/usr/local/bin/chromium-mcp", "--headless=true", "--isolated=true"]
+
+[mcp_servers."perplexity-ask"]
+command = "npx"
+args = ["-y", "server-perplexity-ask"]
+env = { "PERPLEXITY_API_KEY" = "${PERPLEXITY_API_KEY}" }
+EOF
+
+# Create Codex auth.json if CODEX_AUTH_JSON is available
+if [ -n "${CODEX_AUTH_JSON:-}" ]; then
+    echo "   Creating Codex authentication file..."
+    echo "${CODEX_AUTH_JSON}" > ~/.codex/auth.json
+    echo "   ✅ Codex authentication configured"
+else
+    echo "   ⚠️  Skipping Codex auth (no CODEX_AUTH_JSON found)"
+fi
+
+echo "✅ Codex configured"
+
+# Create Convex configuration if access token is available
+if [ -n "${CONVEX_ACCESS_TOKEN:-}" ]; then
+    echo ""
+    echo "⚡ Configuring Convex..."
+    mkdir -p /home/node/.convex
+    cat > /home/node/.convex/config.json <<EOF
+{
+  "accessToken": "${CONVEX_ACCESS_TOKEN}"
+}
+EOF
+    echo "   ✅ Convex configured"
+else
+    echo ""
+    echo "   ⚠️  Skipping Convex config (no CONVEX_ACCESS_TOKEN found)"
+fi
+
 # Clear sensitive tokens from environment
 unset GITHUB_TOKEN
+unset PERPLEXITY_API_KEY
+unset CODEX_AUTH_JSON
+unset CONVEX_ACCESS_TOKEN
