@@ -272,50 +272,40 @@ create_sandbox() {
     # Create temporary env file to avoid token exposure in process list
     temp_env_file=$(create_temp_env_file)
     
-    # Determine source for DevPod
-    local temp_clone_dir=""
-    local source_url
+    # Use the sandbox repo as DevPod source (has .devcontainer)
+    # Target repo is cloned inside the container by post-create.sh
+    # This avoids bind-mounting host dirs (security) and needing .devcontainer in target repos
+    local sandbox_repo_url
+    sandbox_repo_url=$(git -C "$SANDBOX_ROOT" remote get-url origin 2>/dev/null || echo "")
 
-    if [ -n "$REPO_ARG" ]; then
-        # Clone repo locally and inject .devcontainer from sandbox repo
-        # This means client repos don't need their own .devcontainer
-        temp_clone_dir=$(mktemp -d)
-        local clone_target="${temp_clone_dir}/${REPO_NAME}"
-        local auth_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.git"
-
-        echo "🔍 Checking if branch '${BRANCH_ARG}' exists..."
-        if git ls-remote --heads "${REPO_URL}" "${BRANCH_ARG}" 2>/dev/null | grep -q "${BRANCH_ARG}"; then
-            echo "📥 Cloning repository (branch: ${BRANCH_ARG})..."
-            git clone --depth 1 --branch "${BRANCH_ARG}" "${auth_url}" "${clone_target}" 2>&1 | grep -v 'x-access-token' || true
-        else
-            echo "⚠️  Branch '${BRANCH_ARG}' does not exist, cloning default branch..."
-            git clone --depth 1 "${auth_url}" "${clone_target}" 2>&1 | grep -v 'x-access-token' || true
-        fi
-
-        # Inject .devcontainer from sandbox repo (overrides any existing)
-        cp -r "${SANDBOX_ROOT}/.devcontainer" "${clone_target}/.devcontainer"
-        echo "   ✓ Injected .devcontainer from sandbox repo"
-
-        source_url="${clone_target}"
-    else
-        # Use current directory (assumes .devcontainer already present)
-        source_url="$(pwd)"
-        echo "📥 Using current directory..."
+    # Convert SSH URL to HTTPS if needed
+    if [[ "$sandbox_repo_url" == git@github.com:* ]]; then
+        sandbox_repo_url="https://github.com/${sandbox_repo_url#git@github.com:}"
+        sandbox_repo_url="${sandbox_repo_url%.git}.git"
     fi
 
-    # Create workspace with DevPod
+    if [ -z "$sandbox_repo_url" ]; then
+        echo "❌ Could not determine sandbox repo URL from git remote"
+        exit 1
+    fi
+
+    echo "📥 Using sandbox repo as container source: ${sandbox_repo_url}"
+
+    # Export repo vars so devcontainer.json ${localEnv:...} can resolve them
+    export REPO_URL REPO_OWNER REPO_NAME
+    export BRANCH_NAME="${BRANCH_ARG}"
+
+    # Create workspace with DevPod using sandbox repo (contains .devcontainer)
+    # Target repo details passed via env file — post-create.sh clones it inside container
     devpod up \
         --provider docker \
         --ide none \
         --id "${workspace_name}" \
         --workspace-env-file "${temp_env_file}" \
-        "${source_url}"
+        "${sandbox_repo_url}"
 
-    # Clean up temp files immediately
+    # Clean up temp env file
     rm -f "${temp_env_file}"
-    if [ -n "$temp_clone_dir" ]; then
-        rm -rf "$temp_clone_dir"
-    fi
 
     # Register with reverse proxy for browser access
     register_sandbox_with_proxy "${workspace_name}" || true

@@ -28,20 +28,21 @@ git config --global credential.https://github.com.username oauth2
 # Store token using git credential helper (more secure than .git-credentials file)
 printf "protocol=https\nhost=github.com\nusername=oauth2\npassword=%s\n\n" "${GITHUB_TOKEN}" | git credential-cache store
 
-# DevPod should have already cloned the repository
-# We just need to ensure we're in the right directory and set up Git auth
-
-# Find the repository directory
-if [ -d "/workspace/.git" ]; then
+# Clone the target repo inside the container (no host bind mount)
+# DevPod cloned the sandbox repo (for .devcontainer), now we clone the actual working repo
+if [ -n "${REPO_URL:-}" ] && [ -n "${REPO_NAME:-}" ]; then
+    TARGET_DIR="/workspaces/${REPO_NAME}"
+    if [ ! -d "${TARGET_DIR}/.git" ]; then
+        echo "📥 Cloning target repository: ${REPO_OWNER}/${REPO_NAME}..."
+        git clone "${REPO_URL}" "${TARGET_DIR}"
+        cd "${TARGET_DIR}"
+    else
+        cd "${TARGET_DIR}"
+    fi
+elif [ -d "/workspace/.git" ]; then
     cd /workspace
-elif [ -d "/workspaces/${REPO_NAME}/.git" ]; then  
-    cd "/workspaces/${REPO_NAME}"
 elif [ -d ".git" ]; then
-    # Already in repo directory
     :
-else
-    echo "⚠️  Warning: Could not find Git repository. DevPod should have cloned it."
-    echo "   You may need to clone manually if needed."
 fi
 
 # If we're in a git repo, show current status and handle branch
