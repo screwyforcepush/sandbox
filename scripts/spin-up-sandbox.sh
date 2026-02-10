@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SANDBOX_ROOT="$(dirname "$SCRIPT_DIR")"
 source "${SCRIPT_DIR}/lib/proxy-helpers.sh"
 
 echo "🚀 Claude Agent Sandbox Launcher"
@@ -272,41 +273,49 @@ create_sandbox() {
     temp_env_file=$(create_temp_env_file)
     
     # Determine source for DevPod
+    local temp_clone_dir=""
+    local source_url
+
     if [ -n "$REPO_ARG" ]; then
-        # Check if branch exists before using it
+        # Clone repo locally and inject .devcontainer from sandbox repo
+        # This means client repos don't need their own .devcontainer
+        temp_clone_dir=$(mktemp -d)
+        local clone_target="${temp_clone_dir}/${REPO_NAME}"
+        local auth_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.git"
+
         echo "🔍 Checking if branch '${BRANCH_ARG}' exists..."
-        if git ls-remote --heads "${REPO_URL}" "${BRANCH_ARG}" | grep -q "${BRANCH_ARG}"; then
-            # Branch exists, use it
-            local source_url="${REPO_URL}@${BRANCH_ARG}"
-            echo "📥 DevPod will clone repository with existing branch..."
-            echo "   Source: ${source_url}"
+        if git ls-remote --heads "${REPO_URL}" "${BRANCH_ARG}" 2>/dev/null | grep -q "${BRANCH_ARG}"; then
+            echo "📥 Cloning repository (branch: ${BRANCH_ARG})..."
+            git clone --depth 1 --branch "${BRANCH_ARG}" "${auth_url}" "${clone_target}" 2>&1 | grep -v 'x-access-token' || true
         else
-            # Branch doesn't exist, clone default and inform user
-            local source_url="${REPO_URL}"
-            echo "⚠️  Branch '${BRANCH_ARG}' does not exist in remote repository"
-            echo "📥 DevPod will clone default branch..."
-            echo "   Source: ${source_url}"
-            echo ""
-            echo "   After sandbox starts, create the branch with:"
-            echo "   devpod ssh ${workspace_name}"
-            echo "   git checkout -b ${BRANCH_ARG}"
+            echo "⚠️  Branch '${BRANCH_ARG}' does not exist, cloning default branch..."
+            git clone --depth 1 "${auth_url}" "${clone_target}" 2>&1 | grep -v 'x-access-token' || true
         fi
+
+        # Inject .devcontainer from sandbox repo (overrides any existing)
+        cp -r "${SANDBOX_ROOT}/.devcontainer" "${clone_target}/.devcontainer"
+        echo "   ✓ Injected .devcontainer from sandbox repo"
+
+        source_url="${clone_target}"
     else
-        # Use current directory
-        local source_url="$(pwd)"
+        # Use current directory (assumes .devcontainer already present)
+        source_url="$(pwd)"
         echo "📥 Using current directory..."
     fi
-    
-    # Create workspace with DevPod using repository URL
+
+    # Create workspace with DevPod
     devpod up \
         --provider docker \
         --ide none \
         --id "${workspace_name}" \
         --workspace-env-file "${temp_env_file}" \
         "${source_url}"
-    
-    # Clean up temp env file immediately
+
+    # Clean up temp files immediately
     rm -f "${temp_env_file}"
+    if [ -n "$temp_clone_dir" ]; then
+        rm -rf "$temp_clone_dir"
+    fi
 
     # Register with reverse proxy for browser access
     register_sandbox_with_proxy "${workspace_name}" || true
