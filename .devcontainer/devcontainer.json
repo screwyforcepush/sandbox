@@ -45,8 +45,8 @@
     "GOOGLE_GENAI_USE_VERTEXAI": "${localEnv:GOOGLE_GENAI_USE_VERTEXAI}"
   },
   
-  // Port forwarding for frontend, storybook
-  "forwardPorts": [3000, 6006],
+  // Port access via Traefik reverse proxy: http://{workspace}-{port}.localhost
+  // No forwardPorts needed — avoids conflicts with multiple containers
 
   // Post-create command to set up the repository and authenticate tools
   "postCreateCommand": "bash .devcontainer/post-create.sh",

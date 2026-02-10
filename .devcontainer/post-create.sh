@@ -139,6 +139,51 @@ echo "" >> ~/.bashrc
 echo "# Add uv to PATH" >> ~/.bashrc
 echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.bashrc
 
+# Install tmux helper for sandbox sessions
+mkdir -p "$HOME/.local/bin"
+cat > "$HOME/.local/bin/smux" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+PHONETIC=(alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey xray yankee zulu)
+
+find_free() {
+    for n in "${PHONETIC[@]}"; do
+        tmux has-session -t "$n" 2>/dev/null || { echo "$n"; return; }
+    done
+    echo "session-$(date +%s)"
+}
+
+case "${1:-}" in
+    ls)
+        tmux ls
+        exit 0
+        ;;
+    kill)
+        shift
+        tmux kill-session -t "${1:?session name}"
+        exit 0
+        ;;
+esac
+
+session="${1:-$(find_free)}"
+shift || true
+cmd="${*:-${SHELL:-/bin/bash}}"
+
+tmux has-session -t "$session" 2>/dev/null || tmux new-session -d -s "$session" "$cmd"
+tmux attach -t "$session"
+EOF
+chmod +x "$HOME/.local/bin/smux"
+
+# Add helper alias for bash/zsh shells
+touch ~/.bashrc ~/.zshrc
+if ! grep -q 'alias smux=' ~/.bashrc 2>/dev/null; then
+    echo 'alias smux="$HOME/.local/bin/smux"' >> ~/.bashrc
+fi
+if ! grep -q 'alias smux=' ~/.zshrc 2>/dev/null; then
+    echo 'alias smux="$HOME/.local/bin/smux"' >> ~/.zshrc
+fi
+
 echo ""
 echo "🌍 Locale configured: en_US.UTF-8"
 echo "⚡ uv installed: Fast Python package management available"

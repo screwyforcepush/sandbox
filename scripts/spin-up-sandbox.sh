@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/proxy-helpers.sh"
+
 echo "🚀 Claude Agent Sandbox Launcher"
 echo "================================"
 echo ""
@@ -304,8 +307,10 @@ create_sandbox() {
     
     # Clean up temp env file immediately
     rm -f "${temp_env_file}"
-    
-    
+
+    # Register with reverse proxy for browser access
+    register_sandbox_with_proxy "${workspace_name}" || true
+
     echo ""
     echo "✅ Sandbox created successfully!"
     echo ""
@@ -324,10 +329,16 @@ create_sandbox() {
     echo "   ✓ No host filesystem access"
     echo ""
     echo "🖥️  Access your sandbox:"
-    echo "   SSH: devpod ssh ${workspace_name}"
-    echo "   Logs: devpod logs ${workspace_name}"
-    echo "   Stop: devpod stop ${workspace_name}"
+    echo "   SSH:    devpod ssh ${workspace_name}"
+    echo "   Logs:   devpod logs ${workspace_name}"
+    echo "   Stop:   devpod stop ${workspace_name}"
     echo "   Delete: devpod delete ${workspace_name}"
+    echo ""
+    echo "🌐 Browser access (dev servers must bind 0.0.0.0):"
+    echo "   http://${workspace_name}-3000.localhost"
+    echo "   http://${workspace_name}-5173.localhost"
+    echo "   http://${workspace_name}-8080.localhost"
+    echo "   Proxy dashboard: http://localhost:8080"
     echo ""
     echo "💡 To open in VS Code:"
     echo "   devpod up ${workspace_name} --ide vscode"
@@ -344,6 +355,7 @@ main() {
     load_env
     setup_rootless
     init_devpod
+    ensure_proxy_running "$SCRIPT_DIR"
     create_sandbox
     
     # Clear sensitive data from environment

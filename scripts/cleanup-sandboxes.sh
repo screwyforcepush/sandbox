@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/proxy-helpers.sh"
+
 echo "🧹 Claude Agent Sandbox Cleanup"
 echo "==============================="
 echo ""
@@ -32,9 +35,11 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     while IFS= read -r sandbox; do
         if [ -n "$sandbox" ]; then
             echo "Deleting ${sandbox}..."
+            deregister_sandbox_from_proxy "${sandbox}"
             devpod delete "${sandbox}" --force || true
         fi
     done <<< "$sandboxes"
+    cleanup_stale_proxy_configs
     echo ""
     echo "✅ Cleanup complete!"
 else
