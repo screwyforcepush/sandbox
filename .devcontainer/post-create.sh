@@ -50,6 +50,12 @@ elif [ -d ".git" ]; then
     :
 fi
 
+# Set default working directory to the target repo for new shell sessions
+if [ -n "${REPO_NAME:-}" ] && [ -d "/workspaces/${REPO_NAME}" ]; then
+    echo "cd /workspaces/${REPO_NAME}" >> ~/.bashrc
+    echo "cd /workspaces/${REPO_NAME}" >> ~/.zshrc
+fi
+
 # If we're in a git repo, show current status and handle branch
 if [ -d ".git" ]; then
     echo "📦 Repository information:"
