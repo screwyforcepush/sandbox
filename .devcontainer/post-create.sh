@@ -3,6 +3,13 @@ set -euo pipefail
 
 echo "🔒 Setting up secure sandbox environment..."
 
+# Debug: show env vars available during post-create
+echo "DEBUG: REPO_URL=${REPO_URL:-<empty>}"
+echo "DEBUG: REPO_NAME=${REPO_NAME:-<empty>}"
+echo "DEBUG: REPO_OWNER=${REPO_OWNER:-<empty>}"
+echo "DEBUG: BRANCH_NAME=${BRANCH_NAME:-<empty>}"
+echo "DEBUG: PWD=$(pwd)"
+
 # Validate required environment variables
 if [ -z "${GITHUB_TOKEN:-}" ]; then
     echo "❌ Error: GITHUB_TOKEN environment variable is not set"
