@@ -3,13 +3,6 @@ set -euo pipefail
 
 echo "🔒 Setting up secure sandbox environment..."
 
-# Debug: show env vars available during post-create
-echo "DEBUG: REPO_URL=${REPO_URL:-<empty>}"
-echo "DEBUG: REPO_NAME=${REPO_NAME:-<empty>}"
-echo "DEBUG: REPO_OWNER=${REPO_OWNER:-<empty>}"
-echo "DEBUG: BRANCH_NAME=${BRANCH_NAME:-<empty>}"
-echo "DEBUG: PWD=$(pwd)"
-
 # Validate required environment variables
 if [ -z "${GITHUB_TOKEN:-}" ]; then
     echo "❌ Error: GITHUB_TOKEN environment variable is not set"
@@ -41,8 +34,13 @@ if [ -n "${REPO_URL:-}" ] && [ -n "${REPO_NAME:-}" ]; then
     TARGET_DIR="/workspaces/${REPO_NAME}"
     if [ ! -d "${TARGET_DIR}/.git" ]; then
         echo "📥 Cloning target repository: ${REPO_OWNER}/${REPO_NAME}..."
-        git clone "${REPO_URL}" "${TARGET_DIR}"
+        # Use token directly in URL to avoid DevPod credential tunnel crash
+        # (DevPod's GitCredentials gRPC handler has a nil pointer bug during postCreate)
+        AUTH_CLONE_URL="https://oauth2:${GITHUB_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.git"
+        git clone "${AUTH_CLONE_URL}" "${TARGET_DIR}"
+        # Reset remote to plain HTTPS URL (strip token from stored remote)
         cd "${TARGET_DIR}"
+        git remote set-url origin "${REPO_URL}"
     else
         cd "${TARGET_DIR}"
     fi
