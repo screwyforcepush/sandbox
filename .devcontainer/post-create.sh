@@ -256,11 +256,6 @@ ask-for-approval = "never"
 sandbox_mode = "danger-full-access"
 trust_level = "trusted"
 
-
-[mcp_servers."chrome-devtools"]
-command = "npx"
-args = ["chrome-devtools-mcp@latest", "--executablePath=/usr/local/bin/chromium-mcp", "--headless=true", "--isolated=true"]
-
 [mcp_servers."perplexity-ask"]
 command = "npx"
 args = ["-y", "server-perplexity-ask"]
