@@ -21,19 +21,27 @@ ensure_proxy_running() {
 register_sandbox_with_proxy() {
     local workspace_name="$1"
 
-    # Find container by DevPod label + mount inspection (same pattern as list-sandboxes.sh)
+    # Find container by joining workspace.json:uid with dev.containers.id label.
+    # This works for stopped containers too and is stable across host restarts.
+    local uid=""
+    local ws_json
+    ws_json=$(ls "$HOME"/.devpod/contexts/*/workspaces/"$workspace_name"/workspace.json 2>/dev/null | head -1)
+    if [ -n "$ws_json" ]; then
+        uid=$(python3 -c "import json; print(json.load(open('$ws_json')).get('uid',''))" 2>/dev/null)
+    fi
+
     local container_id=""
-    while IFS='|' read -r cid cname; do
-        if [ -z "$cid" ]; then
-            continue
-        fi
-        local mount_check
-        mount_check=$(docker inspect "$cid" --format '{{range .Mounts}}{{.Source}} {{end}}' 2>/dev/null | grep "$workspace_name" || echo "")
-        if [ -n "$mount_check" ]; then
-            container_id="$cid"
-            break
-        fi
-    done < <(docker ps --filter "label=dev.containers.id" --format "{{.ID}}|{{.Names}}")
+    local container_name=""
+    if [ -n "$uid" ]; then
+        while IFS='|' read -r cid cname clabel; do
+            if [ "$clabel" = "$uid" ]; then
+                container_id="$cid"
+                container_name="$cname"
+                break
+            fi
+        done < <(docker ps -a --filter "label=dev.containers.id" \
+            --format '{{.ID}}|{{.Names}}|{{.Label "dev.containers.id"}}')
+    fi
 
     if [ -z "$container_id" ]; then
         echo "⚠️  Could not find container for workspace: ${workspace_name}"
@@ -46,25 +54,17 @@ register_sandbox_with_proxy() {
     # Connect container to sandbox-net (ignore if already connected)
     docker network connect sandbox-net "$container_id" 2>/dev/null || true
 
-    # Get the container's IP on sandbox-net
-    local container_ip
-    container_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "sandbox-net").IPAddress}}' "$container_id" 2>/dev/null)
+    echo "   Container: ${container_id:0:12} (${container_name})"
 
-    if [ -z "$container_ip" ]; then
-        echo "⚠️  Could not get container IP on sandbox-net"
-        return 1
-    fi
-
-    echo "   Container: ${container_id:0:12}"
-    echo "   IP: ${container_ip}"
-
-    # Generate Traefik dynamic config
+    # Generate Traefik dynamic config. Upstream URLs use the container NAME, not
+    # IP — Docker's embedded DNS on sandbox-net resolves names, and names persist
+    # across host restarts while IPs can shuffle.
     mkdir -p "$DYNAMIC_CONFIG_DIR"
     local config_file="${DYNAMIC_CONFIG_DIR}/${workspace_name}.yml"
 
     {
         echo "# Auto-generated for workspace: ${workspace_name}"
-        echo "# Container: ${container_id:0:12} | IP: ${container_ip}"
+        echo "# Container: ${container_id:0:12} (${container_name})"
         echo "http:"
         echo "  routers:"
         for port in "${PROXY_PORTS[@]}"; do
@@ -79,7 +79,7 @@ register_sandbox_with_proxy() {
             echo "    ${workspace_name}-${port}:"
             echo "      loadBalancer:"
             echo "        servers:"
-            echo "          - url: \"http://${container_ip}:${port}\""
+            echo "          - url: \"http://${container_name}:${port}\""
         done
     } > "$config_file"
 

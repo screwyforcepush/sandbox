@@ -17,9 +17,9 @@ fi
 # Set default branch if not specified
 BRANCH_NAME="${BRANCH_NAME:-main}"
 
-# Configure git to use token for authentication via helper
-git config --global user.email "claude-agent@anthropic.com"
-git config --global user.name "Claude Agent"
+# Configure git identity (use env vars if provided, otherwise default to agent identity)
+git config --global user.email "${GIT_AUTHOR_EMAIL:-claude-agent@anthropic.com}"
+git config --global user.name "${GIT_AUTHOR_NAME:-Claude Agent}"
 
 # Use a more secure credential helper configuration
 git config --global credential.helper 'cache --timeout=3600'
@@ -50,11 +50,12 @@ elif [ -d ".git" ]; then
     :
 fi
 
-# Set default working directory to the target repo for all shell types
+# Set default working directory to the target repo for interactive shells only
+# Guard with [[ $- == *i* ]] so non-interactive subprocesses aren't hijacked
 if [ -n "${REPO_NAME:-}" ] && [ -d "/workspaces/${REPO_NAME}" ]; then
-    echo "cd /workspaces/${REPO_NAME}" >> ~/.bashrc
-    echo "cd /workspaces/${REPO_NAME}" >> ~/.zshrc
-    echo "cd /workspaces/${REPO_NAME}" >> ~/.profile
+    echo '[[ $- == *i* ]] && cd /workspaces/'"${REPO_NAME}" >> ~/.bashrc
+    echo '[[ $- == *i* ]] && cd /workspaces/'"${REPO_NAME}" >> ~/.zshrc
+    echo '[[ $- == *i* ]] && cd /workspaces/'"${REPO_NAME}" >> ~/.profile
 fi
 
 # If we're in a git repo, show current status and handle branch
@@ -215,10 +216,10 @@ echo "✅ Chrome MCP wrapper installed at /usr/local/bin/chromium-mcp"
 echo ""
 echo "🔌 Installing Claude MCP servers..."
 
-# Install Perplexity Ask MCP server if API key is available
+# Install Perplexity MCP server if API key is available
 if [ -n "${PERPLEXITY_API_KEY:-}" ]; then
     echo "   Installing perplexity-ask MCP server..."
-    claude mcp add perplexity-ask --scope user -- env PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY}" npx -y server-perplexity-ask
+    claude mcp add perplexity-ask --scope user --env PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY}" -- npx -y @perplexity-ai/mcp-server
     echo "   ✅ perplexity-ask MCP server installed"
 else
     echo "   ⚠️  Skipping perplexity-ask (no PERPLEXITY_API_KEY found)"
@@ -239,6 +240,12 @@ echo "💎 Installing Gemini CLI..."
 npm install -g @google/gemini-cli@latest > /dev/null 2>&1
 echo "   ✅ Gemini CLI installed"
 
+# Install Antigravity CLI
+echo ""
+echo "🪐 Installing Antigravity CLI..."
+curl -fsSL https://antigravity.google/cli/install.sh | bash > /dev/null 2>&1
+echo "   ✅ Antigravity CLI installed"
+
 # Install ast-grep
 echo ""
 echo "🔍 Installing ast-grep..."
@@ -258,7 +265,7 @@ trust_level = "trusted"
 
 [mcp_servers."perplexity-ask"]
 command = "npx"
-args = ["-y", "server-perplexity-ask"]
+args = ["-y", "@perplexity-ai/mcp-server"]
 env = { "PERPLEXITY_API_KEY" = "${PERPLEXITY_API_KEY}" }
 EOF
 

@@ -42,7 +42,11 @@
     "CODEX_AUTH_JSON": "${localEnv:CODEX_AUTH_JSON}",
     "CONVEX_ACCESS_TOKEN": "${localEnv:CONVEX_ACCESS_TOKEN}",
     "GOOGLE_API_KEY": "${localEnv:GOOGLE_API_KEY}",
-    "GOOGLE_GENAI_USE_VERTEXAI": "${localEnv:GOOGLE_GENAI_USE_VERTEXAI}"
+    "GOOGLE_GENAI_USE_VERTEXAI": "${localEnv:GOOGLE_GENAI_USE_VERTEXAI}",
+    "GIT_AUTHOR_NAME": "${localEnv:GIT_AUTHOR_NAME}",
+    "GIT_AUTHOR_EMAIL": "${localEnv:GIT_AUTHOR_EMAIL}",
+    "GIT_COMMITTER_NAME": "${localEnv:GIT_COMMITTER_NAME}",
+    "GIT_COMMITTER_EMAIL": "${localEnv:GIT_COMMITTER_EMAIL}"
   },
   
   // Port access via Traefik reverse proxy: http://{workspace}-{port}.localhost

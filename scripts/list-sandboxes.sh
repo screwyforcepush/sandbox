@@ -34,87 +34,90 @@ colorize_usage() {
     fi
 }
 
-# Cache for DevPod containers to avoid repeated calls
+# Cache for DevPod containers to avoid repeated calls.
+# Includes stopped containers so we can still report CONTAINER_ID/NAME for
+# STOPPED workspaces — join key is dev.containers.id label ↔ workspace.json `uid`.
 DEVPOD_CONTAINERS=""
 CACHE_POPULATED=""
 
-# Function to get DevPod containers
 get_devpod_containers() {
     if [[ -n "$CACHE_POPULATED" ]]; then
         echo "$DEVPOD_CONTAINERS"
         return
     fi
-    
-    DEVPOD_CONTAINERS=$(docker ps --filter "label=dev.containers.id" --format "{{.ID}}|{{.Names}}")
+
+    DEVPOD_CONTAINERS=$(docker ps -a --filter "label=dev.containers.id" \
+        --format "{{.ID}}|{{.Names}}|{{.State}}|{{.Label \"dev.containers.id\"}}")
     CACHE_POPULATED="1"
     echo "$DEVPOD_CONTAINERS"
 }
 
-# Function to find container for specific workspace using mount inspection
+# Read the DevPod workspace UID (e.g. "default-cs-3cc1c") from its workspace.json.
+# This value is written by DevPod at workspace creation and labels its container.
+get_workspace_uid() {
+    local workspace_name=$1
+    local ws_json
+    ws_json=$(ls "$HOME"/.devpod/contexts/*/workspaces/"$workspace_name"/workspace.json 2>/dev/null | head -1)
+    if [[ -z "$ws_json" ]]; then
+        echo ""
+        return
+    fi
+    python3 -c "import json,sys; print(json.load(open('$ws_json')).get('uid',''))" 2>/dev/null
+}
+
+# Find the container (running or stopped) whose dev.containers.id label matches
+# the workspace's uid. Returns "id|name|state" or empty string.
 find_container_for_workspace() {
     local workspace_name=$1
+    local uid
+    uid=$(get_workspace_uid "$workspace_name")
+
+    if [[ -z "$uid" ]]; then
+        echo ""
+        return
+    fi
+
     local containers
     containers=$(get_devpod_containers)
-    
-    # Check each DevPod container to see if it has a mount for this workspace
-    while IFS='|' read -r container_id container_name; do
-        if [[ -n "$container_id" ]]; then
-            # Check if this container has a mount path containing the workspace name
-            local mount_check
-            mount_check=$(docker inspect "$container_id" --format '{{range .Mounts}}{{.Source}}{{end}}' 2>/dev/null | grep "$workspace_name" || echo "")
-            
-            if [[ -n "$mount_check" ]]; then
-                echo "$container_id|$container_name"
-                return
-            fi
+
+    while IFS='|' read -r cid cname cstate clabel; do
+        if [[ "$clabel" == "$uid" ]]; then
+            echo "$cid|$cname|$cstate"
+            return
         fi
     done <<< "$containers"
-    
-    # No specific container found
+
     echo ""
 }
 
-# Function to get container stats for a workspace
+# Emits 9 pipe-separated fields: cpu|mem|mem%|net|disk|pids|container_id|container_name|status
 get_container_stats() {
     local workspace_name=$1
-    
-    # Check if workspace is actually running
-    local devpod_status
-    devpod_status=$(devpod status "$workspace_name" 2>&1 | grep "Running" || echo "")
-    
-    if [[ -z "$devpod_status" ]]; then
-        echo "N/A|N/A|N/A|N/A|N/A|N/A|N/A|STOPPED"
-        return
-    fi
-    
-    # Find the specific container for this workspace
+
     local container_info
     container_info=$(find_container_for_workspace "$workspace_name")
-    
+
     if [[ -z "$container_info" ]]; then
-        echo "N/A|N/A|N/A|N/A|N/A|N/A|N/A|NO_CONTAINER"
+        echo "N/A|N/A|N/A|N/A|N/A|N/A|N/A|N/A|NO_CONTAINER"
         return
     fi
-    
-    # Parse container ID and name
-    local container_id container_name
-    IFS='|' read -r container_id container_name <<< "$container_info"
-    
-    if [[ -z "$container_id" ]]; then
-        echo "N/A|N/A|N/A|N/A|N/A|N/A|N/A|NO_CONTAINER"
+
+    local container_id container_name container_state
+    IFS='|' read -r container_id container_name container_state <<< "$container_info"
+
+    if [[ "$container_state" != "running" ]]; then
+        echo "N/A|N/A|N/A|N/A|N/A|N/A|${container_id:0:12}|${container_name}|STOPPED"
         return
     fi
-    
-    # Get stats for this specific container
+
     local stats_output
     stats_output=$(docker stats --no-stream --format "{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}|{{.NetIO}}|{{.BlockIO}}|{{.PIDs}}" "$container_id" 2>/dev/null || echo "")
-    
+
     if [[ -z "$stats_output" ]]; then
-        echo "N/A|N/A|N/A|N/A|N/A|${container_id:0:12}|${container_name}|ERROR"
+        echo "N/A|N/A|N/A|N/A|N/A|N/A|${container_id:0:12}|${container_name}|ERROR"
         return
     fi
-    
-    # Format: cpu|memory|mem%|net|disk|pids|container_id|container_name|status
+
     echo "${stats_output}|${container_id:0:12}|${container_name}|RUNNING"
 }
 
