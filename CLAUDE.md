@@ -81,7 +81,7 @@ Secure, isolated dev environments for AI agents. Uses DevPod + Docker to create 
 
 - DevPod workspace names: 48-char limit, auto-truncated. Format: `claude-sandbox-{repo}-YYYYMMDD-HHMMSS`
 - Containers run as `vscode` user, non-root, with SYS_ADMIN + NET_ADMIN dropped
-- Pre-installed: GitHub CLI (auto-authed), Node.js 20, Claude Code, git (HTTPS auth)
+- Pre-installed: GitHub CLI (auto-authed), Node.js 22 (latest from base image), Claude Code, git (HTTPS auth)
 - Container env vars: GITHUB_TOKEN, REPO_URL, REPO_OWNER, REPO_NAME, BRANCH_NAME, GH_TOKEN, CLAUDE_COMMS_SERVER
 - External repo flow: clone to temp dir -> copy .devcontainer in -> create DevPod workspace
 - Traefik reverse proxy: file provider watches `~/.sandbox-proxy/dynamic/`. URLs: `http://{workspace}-{port}.localhost`

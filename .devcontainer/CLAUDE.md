@@ -4,7 +4,9 @@
 
 ## Decisions
 
-**Base image**: `javascript-node:20-bookworm` (Debian 12). Upgraded from Bullseye for GLIBC 2.36 (some tools need >=2.32). Same MS devcontainer family, no breaking changes.
+**Base image**: `javascript-node:22-bookworm` (Debian 12). Upgraded from Bullseye for GLIBC 2.36 (some tools need >=2.32). Same MS devcontainer family, no breaking changes.
+
+**Node version**: Floats with the base image tag (latest Node 22.x at image pull time), not pinned. Deliberate: no need for an exact version, and it avoids maintaining a pin. To pin, add `ghcr.io/devcontainers/features/node:1` with an exact `version`; it reuses the image's nvm, and `nvm/current/bin` precedes `/usr/local/bin` on PATH, so the pin takes priority.
 
 **uv package manager**: Installed via `curl -LsSf https://astral.sh/uv/install.sh | sh` in post-create.sh. Installs to `~/.cargo/bin`. 10-100x faster than pip. Falls back to pip if install fails.
 
