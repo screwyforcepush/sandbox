@@ -21,13 +21,6 @@ BRANCH_NAME="${BRANCH_NAME:-main}"
 git config --global user.email "${GIT_AUTHOR_EMAIL:-claude-agent@anthropic.com}"
 git config --global user.name "${GIT_AUTHOR_NAME:-Claude Agent}"
 
-# Use a more secure credential helper configuration
-git config --global credential.helper 'cache --timeout=3600'
-git config --global credential.https://github.com.username oauth2
-
-# Store token using git credential helper (more secure than .git-credentials file)
-printf "protocol=https\nhost=github.com\nusername=oauth2\npassword=%s\n\n" "${GITHUB_TOKEN}" | git credential-cache store
-
 # Clone the target repo inside the container (no host bind mount)
 # DevPod cloned the sandbox repo (for .devcontainer), now we clone the actual working repo
 if [ -n "${REPO_URL:-}" ] && [ -n "${REPO_NAME:-}" ]; then

@@ -8,6 +8,8 @@
 
 **Node version**: Floats with the base image tag (latest Node 22.x at image pull time), not pinned. Deliberate: no need for an exact version, and it avoids maintaining a pin. To pin, add `ghcr.io/devcontainers/features/node:1` with an exact `version`; it reuses the image's nvm, and `nvm/current/bin` precedes `/usr/local/bin` on PATH, so the pin takes priority.
 
+**Git auth**: Handled solely by `gh auth setup-git` in auth-setup.sh (postStart), which makes git use `gh auth git-credential` for github.com. gh reads `GH_TOKEN` from containerEnv, so the token is fixed at container creation; rotating it means recreating the sandbox. A `credential-cache` helper used to be configured in post-create.sh but was dead code (shadowed by the github.com-scoped gh helper) and was removed. The initial clone in post-create.sh embeds the token in the URL instead, since it runs before auth-setup.sh.
+
 **uv package manager**: Installed via `curl -LsSf https://astral.sh/uv/install.sh | sh` in post-create.sh. Installs to `~/.cargo/bin`. 10-100x faster than pip. Falls back to pip if install fails.
 
 **Locale**: `LANG=en_US.UTF-8` and `LC_ALL=en_US.UTF-8` appended to `~/.bashrc` in post-create.sh. Prevents encoding errors in CLI tools.
